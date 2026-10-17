@@ -27,6 +27,7 @@ class AdvancedRAG:
         self._chunk_index: list = []  # faiss 位置 -> chunk dict
         self.bm25 = None              # BM25 索引
         self.docs: list[str] = []     # BM25 语料（与 faiss 对齐）
+        self.cache = None             # 语义缓存（由 AppState 注入；None 表示不启用）
 
     # ==================================================================
     # 索引构建
@@ -87,7 +88,11 @@ class AdvancedRAG:
         return visible is None or position in visible
 
     def vector_search(
-        self, query: str, top_k: int = 10, allowed_doc_ids: Optional[set[int]] = None
+        self,
+        query: str,
+        top_k: int = 10,
+        allowed_doc_ids: Optional[set[int]] = None,
+        query_embedding: Optional[list[float]] = None,
     ) -> list[dict]:
         """稠密向量检索（余弦相似度）。
 
@@ -104,7 +109,10 @@ class AdvancedRAG:
         if visible is not None and not visible:
             return []  # 无任何可见文档，直接短路（避免无谓的向量化调用）
 
-        q = np.array([llm.embed_text(query)], dtype="float32")
+        q = np.array(
+            [query_embedding if query_embedding is not None else llm.embed_text(query)],
+            dtype="float32",
+        )
         faiss.normalize_L2(q)
         pool = max(top_k, settings.RETRIEVAL_RECALL_POOL) if visible is not None else top_k
         k = min(pool, len(self._chunk_index))
@@ -222,24 +230,51 @@ class AdvancedRAG:
     # 对外完整管线
     # ==================================================================
     def _hybrid_retrieve(
-        self, query: str, top_k_rrf: int = 20, allowed_doc_ids: Optional[set[int]] = None
+        self,
+        query: str,
+        top_k_rrf: int = 20,
+        allowed_doc_ids: Optional[set[int]] = None,
+        query_embedding: Optional[list[float]] = None,
     ) -> list[dict]:
         """单查询混合召回：向量 + BM25 → RRF（两条召回路径都带权限过滤）。"""
-        vector_docs = self.vector_search(query, top_k=10, allowed_doc_ids=allowed_doc_ids)
+        vector_docs = self.vector_search(
+            query, top_k=10, allowed_doc_ids=allowed_doc_ids, query_embedding=query_embedding
+        )
         bm25_docs = self.bm25_search(query, top_k=10, allowed_doc_ids=allowed_doc_ids)
         return self.rrf_merge([vector_docs, bm25_docs], top_k=top_k_rrf)
 
     def retrieve(
         self, question: str, top_n: int = 5, allowed_doc_ids: Optional[set[int]] = None
     ) -> list[dict]:
-        """完整检索流水线（查询改写 → 混合召回 → RRF → Rerank）。
+        """完整检索流水线（查询改写 → 混合召回 → RRF → Rerank），带语义缓存。
 
         allowed_doc_ids: 当前用户可见的文档 ID 集合；None 表示不限制（管理员）。
         权限过滤在**每一路召回的候选生成阶段**生效，因此最终的 RRF/Rerank
         候选池中不会出现无权文档——这正是企业级 RAG 与普通实现的本质区别。
+
+        缓存（v3.3）：
+        - 键 = 问题向量（语义近似）+ 权限范围指纹 + 索引版本；
+        - 命中则直接返回，跳过改写/召回/重排（延迟与成本的降幅最大在这里）；
+        - 问题向量只计算一次，未命中时复用给原始查询的向量检索，避免重复调用 embedding。
         """
         if not self.index_ready:
             return []
+
+        cache = getattr(self, "cache", None)
+        scope = None
+        question_embedding: Optional[list[float]] = None
+
+        if cache is not None and getattr(cache, "enabled", False):
+            scope = cache.scope_key(allowed_doc_ids)
+            try:
+                question_embedding = llm.embed_text(question)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("查询向量化失败，本次跳过缓存：%s", exc)
+                cache = None
+            if cache is not None:
+                cached = cache.get(question_embedding, scope)
+                if cached is not None:
+                    return cached[:top_n]
 
         queries = [question]
         if settings.RAG_FUSION:
@@ -247,13 +282,22 @@ class AdvancedRAG:
             queries = [question, *[q for q in rewritten if q and q != question]]
 
         all_results = []
-        for query in queries:
+        for idx, query in enumerate(queries):
             all_results.append(
-                self._hybrid_retrieve(query, top_k_rrf=20, allowed_doc_ids=allowed_doc_ids)
+                self._hybrid_retrieve(
+                    query,
+                    top_k_rrf=20,
+                    allowed_doc_ids=allowed_doc_ids,
+                    query_embedding=question_embedding if idx == 0 else None,
+                )
             )
 
         merged = self.rrf_merge(all_results, top_k=20)
-        return self.rerank_docs(question, merged, top_n=top_n)
+        final = self.rerank_docs(question, merged, top_n=top_n)
+
+        if cache is not None and question_embedding is not None:
+            cache.put(question_embedding, scope, final)
+        return final
 
     # ==================================================================
     # 评测辅助：暴露各策略，供离线评测（scripts/eval_rag.py）对比

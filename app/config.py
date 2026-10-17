@@ -75,6 +75,12 @@ class Settings:
         # 权限过滤的召回池：先宽召回再按可见性过滤（FAISS 本身不支持元数据过滤）
         self.RETRIEVAL_RECALL_POOL = int(_get("RETRIEVAL_RECALL_POOL", "60"))
 
+        # ---- 语义缓存（v3.3）：命中则跳过改写/召回/重排 ----
+        self.CACHE_ENABLED = _get("CACHE_ENABLED", "true").lower() == "true"
+        self.CACHE_MAX_ENTRIES = int(_get("CACHE_MAX_ENTRIES", "512"))
+        self.CACHE_TTL_SECONDS = int(_get("CACHE_TTL_SECONDS", "600"))
+        self.CACHE_MIN_SIMILARITY = float(_get("CACHE_MIN_SIMILARITY", "0.97"))
+
         # ---- 会话与记忆（三层：工作记忆 / 摘要记忆 / 长期记忆）----
         # 工作记忆：每次请求携带的最近对话轮数（1 轮 = 用户+助手各 1 条）
         self.CONTEXT_WINDOW_TURNS = int(_get("CONTEXT_WINDOW_TURNS", "6"))
@@ -128,6 +134,8 @@ class Settings:
             "auth_enabled": self.AUTH_ENABLED,
             "jwt_expire_minutes": self.JWT_EXPIRE_MINUTES,
             "recall_pool": self.RETRIEVAL_RECALL_POOL,
+            "cache_enabled": self.CACHE_ENABLED,
+            "cache_ttl_seconds": self.CACHE_TTL_SECONDS,
             "context_window_turns": self.CONTEXT_WINDOW_TURNS,
             "summary_trigger_messages": self.SUMMARY_TRIGGER_MESSAGES,
             "rag_fusion": self.RAG_FUSION,

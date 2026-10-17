@@ -270,7 +270,11 @@ async def list_audit(
 @router.get("/admin/config")
 async def admin_config(user: CurrentUser = Depends(require_permission("user:manage"))):
     """脱敏配置与统计（不再通过公开的 /health 暴露）。"""
-    return {"config": settings.as_dict(), "stats": state.store.stats()}
+    return {
+        "config": settings.as_dict(),
+        "stats": state.store.stats(),
+        "cache": state.cache.stats(),
+    }
 
 
 # ==================================================================

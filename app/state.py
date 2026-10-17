@@ -13,6 +13,7 @@ from app.config import settings
 from app.db import DocumentStore
 from app.document_processor import DocumentProcessor
 from app.retrieval import AdvancedRAG
+from app.semantic_cache import SemanticCache
 from app.tasks import TaskRunner
 
 
@@ -23,6 +24,13 @@ class AppState:
         self.store: DocumentStore = DocumentStore()
         self.processor: DocumentProcessor = DocumentProcessor(self.store)
         self.rag: AdvancedRAG = AdvancedRAG(self.processor)
+        self.cache = SemanticCache(
+            max_entries=settings.CACHE_MAX_ENTRIES,
+            ttl_seconds=settings.CACHE_TTL_SECONDS,
+            min_similarity=settings.CACHE_MIN_SIMILARITY,
+            enabled=settings.CACHE_ENABLED,
+        )
+        self.rag.cache = self.cache  # 语义缓存注入检索管线
         self.agent = None  # 上传文档后惰性构建
         self.runner: TaskRunner = TaskRunner(self.processor, on_complete=self.rebuild_after_change)
         self._rebuild_lock = threading.Lock()
@@ -73,15 +81,21 @@ class AppState:
                 )
 
     def rebuild_after_change(self) -> None:
-        """文档增删后重建索引与 Agent（加锁，防止并发重建竞争）。"""
+        """文档增删后重建索引与 Agent（加锁，防止并发重建竞争）。
+
+        语义缓存必须使旧结果整体失效：用 bump_version 让"索引版本"变化，
+        避免出现「文档删了，缓存里还能搜到」的越权/过期问题。
+        """
         with self._rebuild_lock:
             self.rag.build_indices()
             self.agent = build_agent(self.rag)
+            self.cache.bump_version()
 
     def reset(self) -> None:
         self.processor.clear_all()
         self.rag.reset()
         self.agent = None
+        self.cache.bump_version()
 
 
 state = AppState()
