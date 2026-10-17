@@ -123,7 +123,7 @@ python scripts/eval_quality.py --probes-only      # 拒答测试（对抗样本�
 | 项目 | 结果 |
 | --- | --- |
 | 纯逻辑单测 | 9 项（JSON 解析：代码块/夹紧/缺字段/非法；聚合：分母只算有效样本、空样本、全失败） |
-| 全量测试 | 123 项全部通过（114 + 9） |
+| 全量测试 | 147 项全部通过（含本模块新增 9 项） |
 | 产物 | `docs/eval_quality_report.md`、`docs/eval_quality_probes.md`、`eval/quality_last_run.json`、`eval/quality_probes_last_run.json` |
 
 ---

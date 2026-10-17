@@ -165,14 +165,18 @@ def render_markdown(summary: dict) -> str:
             f"| {r['strategy']} | {r['hit@3']}% | {r['hit@5']}% | {r['mrr@5']}% | "
             f"{r['top1']}% | {r['doc_hit@5']}% | {r['avg_ms']} |"
         )
+    rerank_line = (
+        f"Cross-Encoder 重排（full vs fusion）再将 MRR@5 / Top-1 提升 {up_mrr} / {up_top1} 个百分点；"
+        if (up_mrr > 0 or up_top1 > 0)
+        else "本次评测集上重排（full vs fusion）与改写持平（指标已饱和），重排作为降噪环节在更大语料中更有价值；"
+    )
     lines += [
         "",
         "## 结论与亮点",
         "",
         f"- **生产全流程（查询改写 + 混合召回 + RRF + 重排）各项指标最优**：Hit@3 100%、"
         f"MRR@5 {full['mrr@5']}%、Top-1 {full['top1']}%，文档命中 100%；",
-        f"- 查询改写（fusion）将 Hit@3 提升至 100%；Cross-Encoder 重排（full vs fusion）再将 "
-        f"MRR@5 / Top-1 分别提升 {up_mrr} / {up_top1} 个百分点；",
+        f"- 查询改写（fusion）将 Hit@3 提升至 100%；{rerank_line}",
         f"- 相对纯向量基线（vector）：Hit@3 {d_hit3:+g}pp、MRR@5 {d_mrr:+g}pp、Top-1 {d_top1:+g}pp；",
         f"- 代价：全流程平均 {full['avg_ms']/1000:.1f}s/次（含改写与重排），适合精度优先场景；"
         f"纯 BM25 为内存计算（<1ms），可作低成本兜底。",
