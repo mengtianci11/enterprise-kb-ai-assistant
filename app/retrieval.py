@@ -66,36 +66,91 @@ class AdvancedRAG:
         return self._faiss_index is not None and self.bm25 is not None
 
     # ==================================================================
-    # 单路召回
+    # 单路召回（含权限过滤）
     # ==================================================================
-    def vector_search(self, query: str, top_k: int = 10) -> list[dict]:
-        """稠密向量检索（余弦相似度）。"""
+    def _visible_indices(self, allowed_doc_ids: Optional[set[int]]) -> Optional[set[int]]:
+        """把「可见文档 ID 集合」映射为「可见分块下标集合」。
+
+        None 表示不限制（管理员/内部任务）。
+        """
+        if allowed_doc_ids is None:
+            return None
+        if not allowed_doc_ids:
+            return set()
+        return {
+            i
+            for i, chunk in enumerate(self._chunk_index)
+            if chunk.get("doc_id") in allowed_doc_ids
+        }
+
+    def _is_visible(self, position: int, visible: Optional[set[int]]) -> bool:
+        return visible is None or position in visible
+
+    def vector_search(
+        self, query: str, top_k: int = 10, allowed_doc_ids: Optional[set[int]] = None
+    ) -> list[dict]:
+        """稠密向量检索（余弦相似度）。
+
+        权限处理：FAISS 不支持元数据过滤，因此采用「宽召回 + 白名单过滤」——
+        先取 `recall_pool` 个候选，再按可见集合过滤后截取 top_k。
+        这样保证**候选集里不会出现无权文档**，而不是生成答案后才补救。
+        """
         if self._faiss_index is None:
             return []
         import faiss
         import numpy as np
 
+        visible = self._visible_indices(allowed_doc_ids)
+        if visible is not None and not visible:
+            return []  # 无任何可见文档，直接短路（避免无谓的向量化调用）
+
         q = np.array([llm.embed_text(query)], dtype="float32")
         faiss.normalize_L2(q)
-        k = min(top_k, len(self._chunk_index))
+        pool = max(top_k, settings.RETRIEVAL_RECALL_POOL) if visible is not None else top_k
+        k = min(pool, len(self._chunk_index))
         scores, idxs = self._faiss_index.search(q, k)
-        return [
-            {
-                "content": self._chunk_index[i]["text"],
-                "score": float(scores[0][j]),
-                "metadata": self._chunk_index[i],
-            }
-            for j, i in enumerate(idxs[0])
-        ]
 
-    def bm25_search(self, query: str, top_k: int = 10) -> list[dict]:
-        """BM25 稀疏检索（jieba 中文分词）。"""
+        results = []
+        for j, i in enumerate(idxs[0]):
+            if i < 0 or not self._is_visible(int(i), visible):
+                continue
+            results.append(
+                {
+                    "content": self._chunk_index[i]["text"],
+                    "score": float(scores[0][j]),
+                    "metadata": self._chunk_index[i],
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
+
+    def bm25_search(
+        self, query: str, top_k: int = 10, allowed_doc_ids: Optional[set[int]] = None
+    ) -> list[dict]:
+        """BM25 稀疏检索（jieba 中文分词）。
+
+        权限处理：BM25 会为**全量语料**打分，因此必须先屏蔽无权分块的分值再排序，
+        否则无权文档会挤占 top_k 名额（既泄露又降低有权内容的召回）。
+        """
         if self.bm25 is None:
             return []
         import jieba
+        import numpy as np
+
+        visible = self._visible_indices(allowed_doc_ids)
+        if visible is not None and not visible:
+            return []
 
         tokenized_query = list(jieba.cut(query))
         scores = self.bm25.get_scores(tokenized_query)
+
+        if visible is not None:
+            mask = np.full(len(scores), -np.inf)
+            idx_list = list(visible)
+            mask[idx_list] = scores[idx_list]
+            scores = mask
+
         top_k_indices = scores.argsort()[::-1][:top_k]
         return [
             {
@@ -104,6 +159,7 @@ class AdvancedRAG:
                 "metadata": self._chunk_index[idx],
             }
             for idx in top_k_indices
+            if np.isfinite(scores[idx]) and scores[idx] > float("-inf")
         ]
 
     # ==================================================================
@@ -165,15 +221,23 @@ class AdvancedRAG:
     # ==================================================================
     # 对外完整管线
     # ==================================================================
-    def _hybrid_retrieve(self, query: str, top_k_rrf: int = 20) -> list[dict]:
-        """单查询混合召回：向量 + BM25 → RRF。"""
-        vector_docs = self.vector_search(query, top_k=10)
-        bm25_docs = self.bm25_search(query, top_k=10)
+    def _hybrid_retrieve(
+        self, query: str, top_k_rrf: int = 20, allowed_doc_ids: Optional[set[int]] = None
+    ) -> list[dict]:
+        """单查询混合召回：向量 + BM25 → RRF（两条召回路径都带权限过滤）。"""
+        vector_docs = self.vector_search(query, top_k=10, allowed_doc_ids=allowed_doc_ids)
+        bm25_docs = self.bm25_search(query, top_k=10, allowed_doc_ids=allowed_doc_ids)
         return self.rrf_merge([vector_docs, bm25_docs], top_k=top_k_rrf)
 
-    def retrieve(self, question: str, top_n: int = 5) -> list[dict]:
-        """完整检索流水线（查询改写 → 混合召回 → RRF → Rerank），
-        返回带 rerank_score 的 Top-N 结果。"""
+    def retrieve(
+        self, question: str, top_n: int = 5, allowed_doc_ids: Optional[set[int]] = None
+    ) -> list[dict]:
+        """完整检索流水线（查询改写 → 混合召回 → RRF → Rerank）。
+
+        allowed_doc_ids: 当前用户可见的文档 ID 集合；None 表示不限制（管理员）。
+        权限过滤在**每一路召回的候选生成阶段**生效，因此最终的 RRF/Rerank
+        候选池中不会出现无权文档——这正是企业级 RAG 与普通实现的本质区别。
+        """
         if not self.index_ready:
             return []
 
@@ -184,7 +248,9 @@ class AdvancedRAG:
 
         all_results = []
         for query in queries:
-            all_results.append(self._hybrid_retrieve(query, top_k_rrf=20))
+            all_results.append(
+                self._hybrid_retrieve(query, top_k_rrf=20, allowed_doc_ids=allowed_doc_ids)
+            )
 
         merged = self.rrf_merge(all_results, top_k=20)
         return self.rerank_docs(question, merged, top_n=top_n)
@@ -192,25 +258,35 @@ class AdvancedRAG:
     # ==================================================================
     # 评测辅助：暴露各策略，供离线评测（scripts/eval_rag.py）对比
     # ==================================================================
-    def strategy_search(self, strategy: str, question: str, top_k: int = 5) -> list[dict]:
+    def strategy_search(
+        self,
+        strategy: str,
+        question: str,
+        top_k: int = 5,
+        allowed_doc_ids: Optional[set[int]] = None,
+    ) -> list[dict]:
         """按策略检索，用于离线评测对比。strategy ∈ {vector, bm25, hybrid, fusion, full}
 
         说明：hybrid/fusion 采用「宽召回（Top-20 候选池）+ 窄输出（Top-k）」，
         与生产管线保持一致。
         """
         if strategy == "vector":
-            return self.vector_search(question, top_k=top_k)
+            return self.vector_search(question, top_k=top_k, allowed_doc_ids=allowed_doc_ids)
         if strategy == "bm25":
-            return self.bm25_search(question, top_k=top_k)
+            return self.bm25_search(question, top_k=top_k, allowed_doc_ids=allowed_doc_ids)
         if strategy == "hybrid":
-            return self._hybrid_retrieve(question, top_k_rrf=20)[:top_k]
+            return self._hybrid_retrieve(
+                question, top_k_rrf=20, allowed_doc_ids=allowed_doc_ids
+            )[:top_k]
         if strategy == "fusion":
             merged_all = []
             for q in [question, *self.query_rewrite(question)]:
-                merged_all.append(self._hybrid_retrieve(q, top_k_rrf=20))
+                merged_all.append(
+                    self._hybrid_retrieve(q, top_k_rrf=20, allowed_doc_ids=allowed_doc_ids)
+                )
             return self.rrf_merge(merged_all, top_k=20)[:top_k]
         if strategy == "full":
-            return self.retrieve(question, top_n=top_k)
+            return self.retrieve(question, top_n=top_k, allowed_doc_ids=allowed_doc_ids)
         raise ValueError(f"未知检索策略: {strategy}")
 
 

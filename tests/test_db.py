@@ -38,6 +38,6 @@ class TestDocumentStore:
 
     def test_stats_and_clear(self, doc_store):
         doc_store.add_document("a.txt", hashlib.md5(b"a").hexdigest(), _make_chunks(2))
-        assert doc_store.stats() == {"documents": 1, "chunks": 2}
+        assert doc_store.stats() == {"documents": 1, "chunks": 2, "users": 0}
         doc_store.clear_all()
-        assert doc_store.stats() == {"documents": 0, "chunks": 0}
+        assert doc_store.stats() == {"documents": 0, "chunks": 0, "users": 0}

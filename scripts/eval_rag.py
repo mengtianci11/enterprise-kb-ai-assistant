@@ -194,3 +194,25 @@ if __name__ == "__main__":
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(render_markdown(summary), encoding="utf-8")
     print(f"\n报告已写入：{REPORT_PATH}")
+
+    # 机器可读结果：供质量门禁（scripts/check_metrics.py）与 CI 对比基线使用
+    import hashlib
+    import json
+    from datetime import datetime
+
+    last_run = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "questions": summary["n"],
+        "chunks": summary["chunks"],
+        "elapsed_s": summary["elapsed_s"],
+        "dataset_md5": hashlib.md5(DATASET_PATH.read_bytes()).hexdigest(),
+        "chunk_strategy": settings.CHUNK_STRATEGY,
+        "chunk_size": settings.CHUNK_SIZE,
+        "chunk_overlap": settings.CHUNK_OVERLAP,
+        "metrics": {r["strategy"]: r for r in summary["rows"]},
+    }
+    LAST_RUN_PATH = ROOT / "eval" / "last_run.json"
+    LAST_RUN_PATH.write_text(
+        json.dumps(last_run, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"机器可读结果已写入：{LAST_RUN_PATH}")

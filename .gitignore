@@ -25,3 +25,12 @@ htmlcov/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 生成物（可复现，不入库）
+eval/last_run.json
+eval/quality_last_run.json
+eval/quality_probes_last_run.json
+eval/eval_tmp.db*
+samples/
+启动服务.bat
+start_server_hidden.bat

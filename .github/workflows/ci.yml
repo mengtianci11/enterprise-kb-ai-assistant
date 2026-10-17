@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # 1) 单元测试：全离线，不依赖任何密钥
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: 安装依赖
+        run: pip install -r requirements-dev.txt
+      - name: 单元测试
+        run: pytest -q
+
+  # 2) 密钥扫描：防止真实 API Key 被提交
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: 扫描硬编码密钥
+        run: python scripts/scan_secrets.py
+
+  # 3) 质量门禁：指标相对基线回归即失败
+  #    需要仓库 Secret: SILICONFLOW_API_KEY（未配置则自动跳过，保证 fork/无密钥仓库可用）
+  eval-gate:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 运行质量门禁
+        env:
+          SILICONFLOW_API_KEY: ${{ secrets.SILICONFLOW_API_KEY }}
+        run: |
+          if [ -z "$SILICONFLOW_API_KEY" ]; then
+            echo "未配置 SILICONFLOW_API_KEY，跳过质量门禁（单元测试已通过）"
+            exit 0
+          fi
+          python scripts/check_metrics.py
+      - name: 上传评测报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: |
+            docs/eval_report.md
+            eval/last_run.json
+          if-no-files-found: ignore

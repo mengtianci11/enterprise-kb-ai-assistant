@@ -7,17 +7,39 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f5f7fa; height: 100vh; display: flex; }
 
+  /* 登录层 */
+  #loginLayer { position: fixed; inset: 0; background: rgba(245,247,250,.97); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .login-card { background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 6px 30px rgba(0,0,0,.08); width: 340px; }
+  .login-card h2 { font-size: 18px; margin-bottom: 6px; }
+  .login-card p.hint { font-size: 12px; color: #909399; margin-bottom: 18px; }
+  .login-card input { width: 100%; padding: 10px 12px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px; margin-bottom: 12px; outline: none; }
+  .login-card input:focus { border-color: #409eff; }
+  .login-card button { width: 100%; padding: 10px; background: #409eff; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .login-card button:hover { background: #337ecc; }
+  .login-error { color: #f56c6c; font-size: 12px; min-height: 16px; margin-bottom: 8px; }
+
   /* 左侧：文档管理 */
-  .sidebar { width: 320px; background: #fff; border-right: 1px solid #e4e7ed; display: flex; flex-direction: column; }
-  .sidebar h2 { padding: 20px; border-bottom: 1px solid #e4e7ed; font-size: 16px; }
+  .sidebar { width: 330px; background: #fff; border-right: 1px solid #e4e7ed; display: flex; flex-direction: column; }
+  .sidebar h2 { padding: 16px 20px; border-bottom: 1px solid #e4e7ed; font-size: 16px; }
+  .user-bar { padding: 10px 20px; border-bottom: 1px solid #e4e7ed; font-size: 12px; color: #606266; display: flex; justify-content: space-between; align-items: center; }
+  .user-bar .role { background: #ecf5ff; color: #409eff; padding: 2px 6px; border-radius: 3px; margin-left: 4px; }
+  .user-bar button { border: none; background: none; color: #909399; cursor: pointer; font-size: 12px; }
   .upload-area { padding: 15px; }
   .upload-btn { width: 100%; padding: 10px; background: #409eff; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
   .upload-btn:hover { background: #337ecc; }
+  .upload-btn:disabled { background: #c0c4cc; cursor: not-allowed; }
   #fileInput { display: none; }
+  .class-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; font-size: 12px; color: #606266; }
+  .class-row select { flex: 1; padding: 6px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 12px; }
   .doc-list { flex: 1; overflow-y: auto; padding: 10px 15px; }
   .doc-item { padding: 10px; margin-bottom: 8px; background: #f4f5f7; border-radius: 6px; font-size: 13px; }
-  .doc-item .name { font-weight: 600; margin-bottom: 4px; }
+  .doc-item .name { font-weight: 600; margin-bottom: 4px; word-break: break-all; }
   .doc-item .info { color: #909399; font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 11px; margin-right: 4px; }
+  .badge.public { background: #f0f9eb; color: #67c23a; }
+  .badge.internal { background: #ecf5ff; color: #409eff; }
+  .badge.confidential { background: #fdf6ec; color: #e6a23c; }
+  .badge.secret { background: #fef0f0; color: #f56c6c; }
   .status { padding: 10px 15px; font-size: 12px; color: #909399; border-top: 1px solid #e4e7ed; }
 
   /* 右侧：聊天区 */
@@ -30,8 +52,6 @@
   .msg.user .bubble { background: #409eff; color: #fff; border-bottom-right-radius: 2px; }
   .msg.assistant .bubble { background: #fff; border: 1px solid #e4e7ed; border-bottom-left-radius: 2px; }
   .msg.system .bubble { background: #fff9e6; border: 1px solid #f5c672; color: #8a6d3b; font-size: 13px; }
-  .sources { margin-top: 6px; font-size: 12px; color: #909399; }
-  .sources span { background: #f4f5f7; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
   .typing { color: #909399; font-style: italic; }
 
   /* 输入区 */
@@ -44,14 +64,43 @@
 </style>
 </head>
 <body>
+  <!-- 登录层 -->
+  <div id="loginLayer">
+    <div class="login-card">
+      <h2>🔐 企业知识库 AI 助手</h2>
+      <p class="hint">请登录后使用（默认管理员：admin / admin123）</p>
+      <input type="text" id="usernameInput" placeholder="用户名" autocomplete="username">
+      <input type="password" id="passwordInput" placeholder="密码" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="login-error" id="loginError"></div>
+      <button onclick="doLogin()">登 录</button>
+    </div>
+  </div>
+
   <div class="sidebar">
     <h2>📚 知识库</h2>
-    <div class="upload-area">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传文档</button>
-      <input type="file" id="fileInput" accept=".pdf,.txt,.md">
+    <div class="user-bar" id="userBar" style="display:none;">
+      <span id="userName">-</span>
+      <span>
+        <button onclick="newConversation()">＋新会话</button>
+        <button onclick="logout()">退出登录</button>
+      </span>
+    </div>
+    <div class="upload-area" id="uploadArea" style="display:none;">
+      <div class="class-row">
+        <label>密级</label>
+        <select id="classificationSelect">
+          <option value="internal">内部（同部门可见）</option>
+          <option value="public">公开（全员可见）</option>
+          <option value="confidential">机密（需授权）</option>
+          <option value="secret">绝密（需授权）</option>
+        </select>
+      </div>
+      <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">上传文档</button>
+      <input type="file" id="fileInput" accept=".pdf,.txt,.md,.docx,.xlsx,.pptx,.csv,.html,.json,.png,.jpg,.jpeg">
     </div>
     <div class="doc-list" id="docList">
-      <div style="color:#909399;font-size:13px;text-align:center;padding:20px;">暂无文档，请上传</div>
+      <div style="color:#909399;font-size:13px;text-align:center;padding:20px;">请先登录</div>
     </div>
     <div class="status" id="status">未连接</div>
   </div>
@@ -60,7 +109,7 @@
     <div class="chat-header">💬 企业知识库 AI 助手</div>
     <div class="messages" id="messages">
       <div class="msg assistant">
-        <div class="bubble">你好！我是企业知识库AI助手。请先在左侧上传文档，然后向我提问。</div>
+        <div class="bubble">你好！我是企业知识库AI助手。请先登录，上传文档后即可向我提问。</div>
       </div>
     </div>
     <div class="input-area">
@@ -70,22 +119,119 @@
   </div>
 
 <script>
-const API_BASE = "http://localhost:8000";
-const conversationId = "user_" + Math.random().toString(36).slice(2, 10);
+const API_BASE = location.origin;   // 与页面同源，避免跨域与硬编码地址
+let token = localStorage.getItem('kb_token') || '';
+let currentUser = null;
+let conversationId = localStorage.getItem('kb_conv') || ("user_" + Math.random().toString(36).slice(2, 10));
+localStorage.setItem('kb_conv', conversationId);
 
-// 文件上传
+// ---------- 基础请求封装：自动带令牌 + 401 兜底 ----------
+async function api(path, options = {}) {
+  const headers = Object.assign({}, options.headers || {});
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + path, Object.assign({}, options, { headers }));
+  if (res.status === 401) {
+    showLogin('登录已过期，请重新登录');
+    throw new Error('未认证');
+  }
+  return res;
+}
+
+function showLogin(msg) {
+  document.getElementById('loginLayer').style.display = 'flex';
+  document.getElementById('uploadArea').style.display = 'none';
+  document.getElementById('userBar').style.display = 'none';
+  if (msg) document.getElementById('loginError').innerText = msg;
+}
+
+function hideLogin() {
+  document.getElementById('loginLayer').style.display = 'none';
+  document.getElementById('uploadArea').style.display = 'block';
+  document.getElementById('userBar').style.display = 'flex';
+}
+
+// ---------- 登录 / 登出 ----------
+async function doLogin() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const errEl = document.getElementById('loginError');
+  errEl.innerText = '';
+  if (!username || !password) { errEl.innerText = '请输入用户名和密码'; return; }
+  try {
+    const res = await fetch(API_BASE + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.innerText = data.detail || '登录失败'; return; }
+    token = data.access_token;
+    localStorage.setItem('kb_token', token);
+    localStorage.setItem('kb_refresh', data.refresh_token || '');
+    applyUser(data.user);
+    hideLogin();
+    addMessage('system', `已登录：${data.user.username}（角色：${data.user.role}${data.user.dept ? '，部门：' + data.user.dept : ''}）`);
+    loadDocs();
+  } catch (err) {
+    errEl.innerText = '无法连接服务：' + err.message;
+  }
+}
+
+function logout() {
+  token = '';
+  currentUser = null;
+  localStorage.removeItem('kb_token');
+  localStorage.removeItem('kb_refresh');
+  document.getElementById('docList').innerHTML = '<div style="color:#909399;font-size:13px;text-align:center;padding:20px;">请先登录</div>';
+  setStatus('已退出登录');
+  showLogin('已退出登录');
+}
+
+function applyUser(user) {
+  currentUser = user;
+  document.getElementById('userName').innerHTML =
+    `${user.username}<span class="role">${user.role}</span>`;
+}
+
+function newConversation() {
+  conversationId = "user_" + Math.random().toString(36).slice(2, 10);
+  localStorage.setItem('kb_conv', conversationId);
+  document.getElementById('messages').innerHTML = '';
+  addMessage('assistant', '已开启新会话，请问有什么可以帮你？');
+  setStatus('新会话已开始');
+}
+
+async function loadMe() {
+  try {
+    const res = await api('/auth/me');
+    if (!res.ok) return false;
+    applyUser(await res.json());
+    hideLogin();
+    return true;
+  } catch (err) { return false; }
+}
+
+// ---------- 文档管理 ----------
 document.getElementById('fileInput').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  const classification = document.getElementById('classificationSelect').value;
   setStatus(`正在上传 ${file.name}...`);
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('classification', classification);
   try {
-    const res = await fetch(API_BASE + '/documents/upload', { method: 'POST', body: formData });
+    const res = await api('/documents/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '上传失败');
-    setStatus(`✅ ${file.name} 已上传，共 ${data.chunks} 个文本块`);
-    loadDocs();
+    if (data.status === 'processing') {
+      setStatus(`⏳ ${file.name} 后台解析中（OCR/大文件），任务 ${data.task_id}`);
+      pollTask(data.task_id, file.name);
+    } else {
+      const warn = (data.warnings && data.warnings.length) ? `，告警 ${data.warnings.length} 条` : '';
+      setStatus(`✅ ${file.name} 已入库：${data.chunks} 块（格式 ${data.format}，密级 ${data.classification}${warn}）`);
+      loadDocs();
+    }
   } catch (err) {
     setStatus(`❌ 上传失败: ${err.message}`);
     addMessage('system', `上传失败：${err.message}`);
@@ -93,32 +239,65 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
   e.target.value = '';
 });
 
-// 加载文档列表
+async function pollTask(taskId, filename) {
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const res = await api('/documents/tasks/' + taskId);
+      const t = await res.json();
+      if (t.status === 'ready') {
+        setStatus(`✅ ${filename} 解析完成：${t.chunks} 块`);
+        loadDocs();
+        return;
+      }
+      if (t.status === 'failed') {
+        setStatus(`❌ ${filename} 解析失败：${t.error}`);
+        addMessage('system', `文档解析失败：${t.error}`);
+        return;
+      }
+      setStatus(`⏳ ${filename} 处理中：${t.status}`);
+    } catch (err) {
+      setStatus('❌ 任务查询失败');
+      return;
+    }
+  }
+  setStatus('⏳ 任务仍在处理中，请稍后在文档列表查看');
+}
+
+const CLASS_LABEL = { public: '公开', internal: '内部', confidential: '机密', secret: '绝密' };
+
 async function loadDocs() {
   try {
-    const res = await fetch(API_BASE + '/documents');
+    const res = await api('/documents');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const list = document.getElementById('docList');
     if (!data.documents || data.documents.length === 0) {
-      list.innerHTML = '<div style="color:#909399;font-size:13px;text-align:center;padding:20px;">暂无文档，请上传</div>';
+      list.innerHTML = '<div style="color:#909399;font-size:13px;text-align:center;padding:20px;">暂无可访问文档</div>';
+      setStatus('可见文档 0 份');
       return;
     }
     list.innerHTML = data.documents.map(d => `
       <div class="doc-item">
         <div class="name">📄 ${d.name}</div>
-        <div class="info">${d.chunks} 个分块 · ${new Date(d.added_at).toLocaleString()}</div>
+        <div class="info">
+          <span class="badge ${d.classification}">${CLASS_LABEL[d.classification] || d.classification}</span>
+          ${d.format || '?'} · ${d.chunks} 块${d.blocks ? ' · ' + d.blocks + ' 结构块' : ''}
+        </div>
+        <div class="info">${new Date(d.added_at).toLocaleString()}${d.dept ? ' · ' + d.dept : ''}</div>
       </div>`).join('');
-    setStatus(`共 ${data.documents.length} 份文档`);
+    setStatus(`可见 ${data.visible_count}/${data.total_count} 份文档`);
   } catch (err) {
     setStatus('❌ 获取文档列表失败');
   }
 }
 
-// 发送问题（流式）
+// ---------- 问答 ----------
 async function sendQuestion() {
   const input = document.getElementById('questionInput');
   const question = input.value.trim();
   if (!question) return;
+  if (!token) { showLogin('请先登录'); return; }
   const btn = document.getElementById('sendBtn');
   btn.disabled = true;
   input.value = '';
@@ -129,21 +308,22 @@ async function sendQuestion() {
   let fullText = '';
 
   try {
-    const res = await fetch(API_BASE + '/chat/stream', {
+    const res = await api('/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, conversation_id: conversationId })
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `HTTP ${res.status}`);
+    }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
-      // 解析 SSE 事件
-      const lines = chunk.split('\n');
-      for (const line of lines) {
+      for (const line of chunk.split('\n')) {
         if (line.startsWith('data:')) {
           const data = line.slice(5).trim();
           if (data === '[DONE]') continue;
@@ -155,7 +335,7 @@ async function sendQuestion() {
     }
   } catch (err) {
     if (!fullText) {
-      bubbleEl.innerText = `连接中断，请重试（${err.message}）`;
+      bubbleEl.innerText = `请求失败：${err.message}`;
       bubbleEl.classList.add('typing');
     }
   }
@@ -183,8 +363,14 @@ function setStatus(text) {
   document.getElementById('status').innerText = text;
 }
 
-// 初始化
-loadDocs();
+// ---------- 初始化 ----------
+(async function init() {
+  if (token && await loadMe()) {
+    loadDocs();
+  } else {
+    showLogin('');
+  }
+})();
 </script>
 </body>
 </html>

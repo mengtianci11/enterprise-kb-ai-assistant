@@ -37,8 +37,8 @@ class FakeAgent:
 
 
 @pytest.fixture(autouse=True)
-def offline_settings(monkeypatch):
-    """全局：注入假 Key、关闭外部 Rerank、打桩向量化，保证测试离线。"""
+def offline_settings(monkeypatch, tmp_path):
+    """全局：注入假 Key、关闭外部 Rerank、打桩向量化、隔离数据目录，保证测试离线且无副作用。"""
     from app import config
     import app.llm as llm
 
@@ -47,6 +47,11 @@ def offline_settings(monkeypatch):
     monkeypatch.setattr(config.settings, "RAG_FUSION", False)
     monkeypatch.setattr(llm, "embed_text", fake_embed)
     monkeypatch.setattr(llm, "embed_texts", lambda texts: [fake_embed(t) for t in texts])
+    # 隔离解析缓存与原件目录：避免测试写脏真实 data/，并保证缓存相关断言可复现
+    monkeypatch.setattr(config.settings, "PARSE_CACHE_DIR", tmp_path / "parsed")
+    monkeypatch.setattr(config.settings, "UPLOAD_DIR", tmp_path / "uploads")
+    (tmp_path / "parsed").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "uploads").mkdir(parents=True, exist_ok=True)
     return config.settings
 
 
@@ -74,26 +79,32 @@ def rag(processor):
     return AdvancedRAG(processor)
 
 
-@pytest.fixture
-def api_client(tmp_path, monkeypatch):
-    """隔离的 FastAPI 测试客户端（tmp 数据库 + 假 Agent + 伪向量）。"""
+def _build_client(tmp_path, monkeypatch, *, auth_enabled: bool):
+    """构建隔离的测试客户端（tmp 库 + 伪向量 + 隔离任务执行器）。"""
     import app.routes as routes
-    from app.agent import build_agent  # noqa: F401
+    from app import config
+    from app import state as state_mod
     from app.db import DocumentStore
     from app.document_processor import DocumentProcessor
     from app.main import create_app
     from app.retrieval import AdvancedRAG
+    from app.tasks import TaskRunner
 
-    store = DocumentStore(db_path=str(tmp_path / "api.db"))
+    monkeypatch.setattr(config.settings, "AUTH_ENABLED", auth_enabled)
+
+    store = DocumentStore(db_path=str(tmp_path / ("auth.db" if auth_enabled else "api.db")))
     processor = DocumentProcessor(store)
     monkeypatch.setattr(processor, "embed_fn", fake_embed)
     rag_inst = AdvancedRAG(processor)
 
-    from app import state as state_mod
-
     for attr, val in [("store", store), ("processor", processor), ("rag", rag_inst), ("agent", None)]:
         setattr(state_mod.state, attr, val)
+    # 关键：任务执行器必须绑定到隔离后的 processor/store，否则异步任务会写到真实库
+    state_mod.state.runner = TaskRunner(processor, on_complete=None)
     monkeypatch.setattr(routes, "state", state_mod.state)
+
+    if auth_enabled:
+        state_mod.state.bootstrap_auth()
 
     app = create_app(with_persistence=False)
     pytest.importorskip("fastapi.testclient")
@@ -101,4 +112,35 @@ def api_client(tmp_path, monkeypatch):
 
     client = TestClient(app)
     client.state_mod = state_mod.state  # type: ignore[attr-defined]
+    return client
+
+
+@pytest.fixture
+def api_client(tmp_path, monkeypatch):
+    """免认证客户端（AUTH_ENABLED=false）：用于文档/问答等既有功能测试。"""
+    return _build_client(tmp_path, monkeypatch, auth_enabled=False)
+
+
+@pytest.fixture
+def secure_client(tmp_path, monkeypatch):
+    """启用认证的客户端：附登录辅助方法。"""
+    client = _build_client(tmp_path, monkeypatch, auth_enabled=True)
+
+    def login(username: str, password: str) -> dict:
+        resp = client.post("/auth/login", json={"username": username, "password": password})
+        assert resp.status_code == 200, resp.text
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    def create_user(username, password, role="user", dept="", headers=None):
+        resp = client.post(
+            "/admin/users",
+            json={"username": username, "password": password, "role": role, "dept": dept},
+            headers=headers or client.admin_headers,
+        )
+        assert resp.status_code == 200, f"建号失败 {username}: {resp.status_code} {resp.text}"
+        return resp
+
+    client.login = login  # type: ignore[attr-defined]
+    client.create_user = create_user  # type: ignore[attr-defined]
+    client.admin_headers = login("admin", "admin123")  # type: ignore[attr-defined]
     return client

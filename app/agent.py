@@ -13,6 +13,7 @@ from typing import Optional
 
 import app.llm as llm  # noqa: F401  (保留引用，便于测试打桩)
 from app.config import settings
+from app.context import current_allowed_docs
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +25,16 @@ SYSTEM_PROMPT = """你是企业知识库AI助手。
 回答要简洁专业，引用资料时标注来源。"""
 
 
-def build_agent(rag, llm_model: Optional[object] = None):
+def build_agent(rag, llm_model: Optional[object] = None, checkpointer: Optional[object] = None):
     """构建 LangGraph ReAct Agent。
 
     rag: AdvancedRAG 实例（工具闭包引用）。
+    checkpointer: 可选。本项目默认不传——会话历史由 app/memory.py 自行管理
+        （工作记忆窗口 + 滚动摘要），以便按 token 预算裁剪上下文；
+        如需 LangGraph 原生线程级记忆，可传入 SqliteSaver 等实现。
     """
     from langchain_core.tools import tool
     from langchain_openai import ChatOpenAI
-    from langgraph.checkpoint.memory import MemorySaver
 
     llm_model = llm_model or ChatOpenAI(
         model=settings.CHAT_MODEL,
@@ -44,7 +47,11 @@ def build_agent(rag, llm_model: Optional[object] = None):
     def search_knowledge_base(query: str) -> str:
         """检索企业知识库，查询公司制度、产品说明、技术文档等内部资料。当用户问到公司相关问题时使用。"""
         try:
-            docs = rag.retrieve(query)
+            # 关键：检索时带上「当前用户可见文档集合」，
+            # 让权限过滤发生在召回阶段，而不是生成答案之后
+            # （详见 app/context.py 与 docs/design_auth.md）
+            allowed = current_allowed_docs.get()
+            docs = rag.retrieve(query, allowed_doc_ids=allowed)
             if not docs:
                 return "知识库中未检索到与问题相关的内容。"
             result_text = "知识库检索到的参考内容如下：\n"
@@ -84,7 +91,7 @@ def build_agent(rag, llm_model: Optional[object] = None):
             llm_model,
             tools,
             system_prompt=SYSTEM_PROMPT,
-            checkpointer=MemorySaver(),
+            checkpointer=checkpointer,
         )
         logger.info("Agent 构建完成（langchain.agents.create_agent）")
         return agent
@@ -96,7 +103,7 @@ def build_agent(rag, llm_model: Optional[object] = None):
             llm_model,
             tools,
             prompt=SYSTEM_PROMPT,
-            checkpointer=MemorySaver(),
+            checkpointer=checkpointer,
         )
         logger.info("Agent 构建完成（langgraph.prebuilt.create_react_agent，兼容模式）")
         return agent
