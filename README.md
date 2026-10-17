@@ -341,9 +341,5 @@ python scripts/check_metrics.py --update-baseline  # 确认提升后更新基线
 
 ## ⚠️ 注意
 
-- `.env` 包含真实 API Key，**切勿提交到 Git**（已加入 `.gitignore`）；
+- `.env` 包含真实 API Key，个人使用时请更改；
 - 文档数据默认存放在 `data/`（SQLite），部署时请挂载该目录确保持久化。
-
----
-
-*本项目为毕业设计 / 简历展示项目，由 FastAPI + LangGraph + FAISS 技术栈构建，全部代码与评测数据可复现。*
