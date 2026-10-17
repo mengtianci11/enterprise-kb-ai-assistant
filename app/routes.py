@@ -7,6 +7,7 @@ v3.1 变化（多用户与权限隔离）：
 - 关键操作写入 append-only 审计日志（登录、上传、删除、问答、权限变更）；
 - `/health` 只暴露非敏感摘要，详细配置移到需鉴权的 `/admin/config`。
 """
+import asyncio
 import logging
 import uuid
 from pathlib import Path
@@ -77,6 +78,42 @@ router = APIRouter()
 # ==================================================================
 # 公共工具
 # ==================================================================
+def _stream_text(message) -> str:
+    """从流式消息块中提取可展示文本（兼容 token 块与完整消息两种形态）。
+
+    过滤规则：
+    - 跳过工具消息（ToolMessage）：它包含的是检索到的资料，不是回答；
+    - 跳过工具调用片段（tool_call_chunks）：否则会把 JSON 参数当答案吐给用户；
+    - content 可能是 str，也可能是结构化列表（取 type=text 的部分）。
+
+    说明：langchain 1.x 的 create_agent 内部使用 ainvoke，通常拿不到逐字 token 块，
+    而是拿到「完整 AIMessage」；因此这里同时兼容 AIMessageChunk 与 AIMessage，
+    由调用方决定是否分段下发（保持前端打字机体验）。
+    """
+    try:
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        if isinstance(message, ToolMessage):
+            return ""
+        if not isinstance(message, AIMessage):  # AIMessageChunk 是 AIMessage 的子类
+            return ""
+        if getattr(message, "tool_call_chunks", None):
+            return ""
+        content = message.content
+    except Exception:  # noqa: BLE001
+        return ""
+
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+        return "".join(parts)
+    return ""
+
+
 def _client_meta(request: Request) -> tuple[str, str]:
     ip = request.client.host if request.client else ""
     forwarded = request.headers.get("x-forwarded-for")
@@ -690,22 +727,26 @@ async def chat_stream(
         tokens = set_permission_context(allowed, user.username)
         collected: list[str] = []
         try:
-            async for event in state.agent.astream_events(
+            # LangGraph 1.x：astream_events 不再产生 on_chat_model_stream；
+            # 用 stream_mode="messages" 取消息（Agent 内部 ainvoke，通常是完整消息）。
+            async for chunk in state.agent.astream(
                 {"messages": messages},
                 config={"configurable": {"thread_id": f"{user.username}:{conv['id']}"}},
-                version="v2",
+                stream_mode="messages",
             ):
-                if event["event"] == "on_chat_model_stream":
-                    token = event["data"]["chunk"].content
-                    if token:
-                        collected.append(token)
-                        yield {"data": token}
+                text = _stream_text(chunk[0] if isinstance(chunk, tuple) else chunk)
+                if text:
+                    collected.append(text)
         except Exception as exc:  # noqa: BLE001
             logger.exception("流式问答异常")
             yield {"data": f"\n[错误] {exc}"}
         finally:
             reset_permission_context(tokens)
             answer = "".join(collected)
+            # 分段下发，保持前端打字机体验（若上游已是 token 块，这里等价于逐块转发）
+            for i in range(0, len(answer), 12):
+                yield {"data": answer[i : i + 12]}
+                await asyncio.sleep(0.01)
             if answer:
                 try:
                     state.store.add_message(conv["id"], "assistant", answer)

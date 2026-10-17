@@ -29,14 +29,14 @@ logger = logging.getLogger(__name__)
 def build_context_messages(
     store: DocumentStore, conv: dict, user_message: str
 ) -> list[tuple[str, str]]:
-    """组装本轮发给模型的上下文：摘要 + 最近 K 轮历史 + 本次提问。"""
-    messages: list[tuple[str, str]] = []
+    """组装本轮发给模型的上下文：摘要 + 最近 K 轮历史 + 本次提问。
 
-    summary = (conv.get("summary") or "").strip()
-    if summary:
-        messages.append(
-            ("system", f"以下是与用户此前对话的摘要，供理解上下文参考：\n{summary}")
-        )
+    为什么摘要要并入用户消息、而不是作为 system 消息：
+    实测发现给 create_agent 传 system 角色消息会让它跳过工具调用
+    （直接回一句"请稍等，我为您查询"），因此摘要以「问题前缀」的形式携带，
+    既保留上下文又不干扰 ReAct 的工具选择。
+    """
+    messages: list[tuple[str, str]] = []
 
     window = max(settings.CONTEXT_WINDOW_TURNS, 1) * 2
     history = store.list_messages(conv["id"], limit=window)
@@ -44,6 +44,13 @@ def build_context_messages(
         role = item["role"]
         if role in ("user", "assistant"):
             messages.append((role, item["content"]))
+
+    summary = (conv.get("summary") or "").strip()
+    if summary:
+        user_message = (
+            f"[此前对话摘要，供理解上下文]\n{summary}\n\n"
+            f"[本次问题]\n{user_message}"
+        )
 
     messages.append(("user", user_message))
     return messages

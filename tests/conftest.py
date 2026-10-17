@@ -27,6 +27,13 @@ class FakeAgent:
     def invoke(self, messages, config):
         return {"messages": [types.SimpleNamespace(content="这是一条离线测试回答。")]}
 
+    async def astream(self, messages, config=None, stream_mode="messages"):
+        """模拟 LangGraph 1.x 的 token 流：yield (AIMessageChunk, metadata)。"""
+        from langchain_core.messages import AIMessageChunk
+
+        for ch in "测试流式":
+            yield (AIMessageChunk(content=ch), {"langgraph_node": "model"})
+
     async def astream_events(self, messages, config=None, version="v2"):
         for ch in "测试流式":
             yield {

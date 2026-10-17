@@ -371,6 +371,13 @@ class RecordingAgent:
         self.received = list(messages["messages"])
         return {"messages": [types.SimpleNamespace(content=self.answer)]}
 
+    async def astream(self, messages, config=None, stream_mode="messages"):
+        from langchain_core.messages import AIMessageChunk
+
+        self.received = list(messages["messages"])
+        for ch in self.answer:
+            yield (AIMessageChunk(content=ch), {"langgraph_node": "model"})
+
     async def astream_events(self, messages, config=None, version="v2"):
         import types
 

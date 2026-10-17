@@ -87,11 +87,14 @@ class TestContextAssembly:
         assert messages[-1] == ("user", "新问题")
         assert messages[0][1] == "问题 8"  # 最近 4 条从「问题 8」开始
 
-    def test_summary_prepended_as_system(self, store, conv):
+    def test_summary_folded_into_question(self, store, conv):
+        """摘要以「问题前缀」注入（不能用 system 消息，否则 Agent 会跳过工具调用）。"""
         store.update_summary(conv["id"], "用户关注年假与报销", 0)
         messages = build_context_messages(store, store.get_conversation(conv["id"]), "继续问")
-        assert messages[0][0] == "system"
-        assert "年假与报销" in messages[0][1]
+        assert all(role != "system" for role, _ in messages)
+        assert messages[-1][0] == "user"
+        assert "年假与报销" in messages[-1][1]
+        assert "继续问" in messages[-1][1]
 
     def test_empty_conversation(self, store, conv):
         messages = build_context_messages(store, conv, "第一个问题")

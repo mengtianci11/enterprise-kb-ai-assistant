@@ -5,6 +5,16 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green) ![LangGraph](https://img.shields.io/badge/LangGraph-1.x-orange) ![FAISS](https://img.shields.io/badge/FAISS-CPU-blue) ![Docker](https://img.shields.io/badge/Docker-ready-2496ed)
 
+## 📸 界面预览
+
+| 登录（JWT 认证） | 文档管理（密级徽标） |
+| --- | --- |
+| ![登录页](docs/images/login.png) | ![主界面](docs/images/main.png) |
+
+**多格式文档问答**（含 Word/Excel/PPT/扫描件 PDF，答案标注章节来源）：
+
+![问答界面](docs/images/chat.png)
+
 ---
 
 ## ✨ 核心特性
