@@ -18,6 +18,9 @@ jobs:
           cache: pip
       - name: 安装依赖
         run: pip install -r requirements-dev.txt
+      - name: 依赖自检（导入关键模块，防漏依赖）
+        run: |
+          python -c "import app.routes, app.security, app.parsers, app.memory, app.state; print('imports ok')"
       - name: 单元测试
         run: pytest -q
 

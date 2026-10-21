@@ -7,6 +7,7 @@ sse-starlette>=1.6
 openai>=1.40
 requests>=2.31
 python-multipart>=0.0.9
+PyJWT>=2.8                      # JWT 认证（app/security.py 直接 import jwt）
 
 # 检索与向量
 numpy>=1.24

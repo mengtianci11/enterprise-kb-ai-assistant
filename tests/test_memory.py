@@ -73,7 +73,8 @@ class TestConversationStore:
         assert [m["content"] for m in msgs] == ["重启前的问题", "重启前的回答"]
 
     def test_ttl_purge(self, store, conv):
-        assert store.purge_old_conversations(0) == 1
+        # 用 -1 天制造「未来截止时间」，避免 days=0 时与创建时间落在同一毫秒导致偶发不删
+        assert store.purge_old_conversations(-1) == 1
         assert store.get_conversation(conv["id"]) is None
 
 
