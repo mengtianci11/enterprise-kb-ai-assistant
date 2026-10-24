@@ -31,6 +31,8 @@ eval/last_run.json
 eval/last_run_details.json
 eval/last_run_v3.json
 eval/last_run_details_v3.json
+eval/last_run_failcases.json
+eval/last_run_details_failcases.json
 eval/quality_last_run.json
 eval/quality_probes_last_run.json
 eval/eval_tmp.db*

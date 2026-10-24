@@ -1,0 +1,122 @@
+{
+  "meta": {
+    "name": "失败问题定向复测集",
+    "n": 12,
+    "source": "eval/failures_v3.json"
+  },
+  "questions": [
+    {
+      "id": 9,
+      "question": "公司应聘一般要面几轮？",
+      "doc": "招聘管理制度.md",
+      "evidence": [
+        "两轮面试"
+      ],
+      "note": "面试轮次(改写)",
+      "type": "single_hop"
+    },
+    {
+      "id": 12,
+      "question": "要给客户发送机密文件，需要走什么流程？",
+      "doc": "信息安全管理办法.md",
+      "evidence": [
+        "数据外发平台提交申请"
+      ],
+      "note": "数据外发(改写)",
+      "type": "single_hop"
+    },
+    {
+      "id": 17,
+      "question": "客户来公司开会想连WiFi，用哪个网络？",
+      "doc": "网络架构与运维.md",
+      "evidence": [
+        "访客WiFi采用每日动态密码"
+      ],
+      "note": "访客WiFi(改写)",
+      "type": "single_hop"
+    },
+    {
+      "id": 24,
+      "question": "服务端口不通，应该先从哪里查起？",
+      "doc": "技术运维手册.md",
+      "evidence": [
+        "先检查防火墙与安全组"
+      ],
+      "note": "端口排查",
+      "type": "single_hop"
+    },
+    {
+      "question": "公司的工作时间和午休是怎么安排的？",
+      "doc": "员工手册.md",
+      "evidence": [
+        "上午9:00至下午18:00，午休1小时"
+      ],
+      "type": "paraphrase",
+      "note": "口语化改问",
+      "id": 25
+    },
+    {
+      "question": "离职后还需要保守公司秘密吗？",
+      "doc": "员工手册.md",
+      "evidence": [
+        "离职后保密义务继续有效"
+      ],
+      "type": "paraphrase",
+      "id": 33
+    },
+    {
+      "question": "面试一共几轮，分别是谁来面？",
+      "doc": "招聘管理制度.md",
+      "evidence": [
+        "安排两轮面试：第一轮技术/业务面试，第二轮部门负责人终面"
+      ],
+      "type": "multi_section",
+      "id": 36
+    },
+    {
+      "question": "公司网络分为哪几层？",
+      "doc": "网络架构与运维.md",
+      "evidence": [
+        "核心层、汇聚层与接入层"
+      ],
+      "type": "single_hop",
+      "id": 54
+    },
+    {
+      "question": "服务端口不通的排查步骤是什么？",
+      "doc": "技术运维手册.md",
+      "evidence": [
+        "先检查防火墙与安全组，再确认进程是否存活"
+      ],
+      "type": "procedure",
+      "id": 69
+    },
+    {
+      "question": "磁盘空间告警先清理哪里？",
+      "doc": "技术运维手册.md",
+      "evidence": [
+        "清理 /opt/app/logs 下过期日志"
+      ],
+      "type": "single_hop",
+      "id": 71
+    },
+    {
+      "question": "项目任务怎么分解、谁来负责？",
+      "doc": "项目管理系统说明.md",
+      "evidence": [
+        "按WBS逐级分解至可执行的工作包"
+      ],
+      "type": "single_hop",
+      "id": 75
+    },
+    {
+      "question": "云ERP 主要面向什么客户？",
+      "doc": "产品使用指南.md",
+      "evidence": [
+        "面向中小制造与流通企业"
+      ],
+      "type": "single_hop",
+      "id": 98
+    }
+  ]
+}

@@ -1,18 +1,16 @@
 {
-  "generated_at": "2026-10-25T00:14:21",
+  "generated_at": "2026-10-25T00:54:04",
   "dataset_md5": "587baf45f26afa864c5010d9c87b2bf3",
   "sources": {
-    "retrieval_points": 575,
+    "retrieval_points": 525,
     "quality_items": 24,
     "probe_items": 5,
     "incidents": 9
   },
-  "total": 23,
+  "total": 22,
   "counts": {
-    "ranking_noise": 12,
+    "ranking_noise": 13,
     "permission": 2,
-    "chunk_recall_miss": 1,
-    "doc_recall_miss": 1,
     "runtime_reliability": 1,
     "agent_behavior": 1,
     "ci_dependency": 1,
@@ -30,7 +28,7 @@
       "question": "要给客户发送机密文件，需要走什么流程？",
       "doc": "信息安全管理办法.md",
       "expected": "金标分块出现在 Top-1",
-      "actual": "最佳 排名第 2；受影响策略：fusion, hybrid, vector",
+      "actual": "最佳 排名第 2；受影响策略：hybrid, vector",
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
@@ -79,32 +77,18 @@
       "id": "F-004"
     },
     {
-      "category": "chunk_recall_miss",
-      "severity": "high",
+      "category": "ranking_noise",
+      "severity": "low",
       "source": "retrieval",
       "question_id": 9,
       "question": "公司应聘一般要面几轮？",
       "doc": "招聘管理制度.md",
       "expected": "金标分块出现在 Top-1",
-      "actual": "最佳 未召回；受影响策略：bm25",
-      "root_cause": "文档已召回但金标分块未进 Top-5：口语与书面语词面不匹配，或分块边界切断答案",
-      "suggested_fix": "同义词/查询扩展；检查分块边界与章节前缀；提高 Top-k",
+      "actual": "最佳 排名第 2；受影响策略：bm25",
+      "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
+      "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
       "id": "F-005"
-    },
-    {
-      "category": "doc_recall_miss",
-      "severity": "high",
-      "source": "retrieval",
-      "question_id": 12,
-      "question": "要给客户发送机密文件，需要走什么流程？",
-      "doc": "信息安全管理办法.md",
-      "expected": "金标分块出现在 Top-1",
-      "actual": "最佳 未召回；受影响策略：bm25",
-      "root_cause": "正确文档都未进 Top-5：通用词命中错误文档，检索缺语义信号或候选池过窄",
-      "suggested_fix": "扩大候选池 / 加领域词表与 IDF 调整 / 调整混合检索权重",
-      "status": "open",
-      "id": "F-006"
     },
     {
       "category": "ranking_noise",
@@ -118,7 +102,7 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-007"
+      "id": "F-006"
     },
     {
       "category": "ranking_noise",
@@ -132,7 +116,7 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-008"
+      "id": "F-007"
     },
     {
       "category": "ranking_noise",
@@ -146,7 +130,7 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-009"
+      "id": "F-008"
     },
     {
       "category": "ranking_noise",
@@ -160,7 +144,7 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-010"
+      "id": "F-009"
     },
     {
       "category": "ranking_noise",
@@ -174,35 +158,35 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
+      "id": "F-010"
+    },
+    {
+      "category": "ranking_noise",
+      "severity": "low",
+      "source": "retrieval",
+      "question_id": 57,
+      "question": "在家办公怎么连公司内网？",
+      "doc": "网络架构与运维.md",
+      "expected": "金标分块出现在 Top-1",
+      "actual": "最佳 排名第 2；受影响策略：fusion",
+      "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
+      "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
+      "status": "open",
       "id": "F-011"
     },
     {
       "category": "ranking_noise",
       "severity": "low",
       "source": "retrieval",
-      "question_id": 9,
-      "question": "公司应聘一般要面几轮？",
-      "doc": "招聘管理制度.md",
-      "expected": "金标分块出现在 Top-1",
-      "actual": "最佳 排名第 4；受影响策略：hybrid",
-      "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
-      "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
-      "status": "open",
-      "id": "F-012"
-    },
-    {
-      "category": "ranking_noise",
-      "severity": "low",
-      "source": "retrieval",
-      "question_id": 98,
-      "question": "云ERP 主要面向什么客户？",
+      "question_id": 105,
+      "question": "忘记密码了怎么办？",
       "doc": "产品使用指南.md",
       "expected": "金标分块出现在 Top-1",
       "actual": "最佳 排名第 2；受影响策略：fusion",
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-013"
+      "id": "F-012"
     },
     {
       "category": "ranking_noise",
@@ -216,7 +200,7 @@
       "root_cause": "金标分块已召回但未排第一：同文档相邻块/近重复块得分略高",
       "suggested_fix": "块级去重（MMR）/ 段落级回退 / 标题加权；Top-1 损失对下游影响有限",
       "status": "open",
-      "id": "F-014"
+      "id": "F-013"
     },
     {
       "category": "runtime_reliability",
@@ -231,7 +215,7 @@
       "suggested_fix": "改用 astream(stream_mode='messages')；_stream_text 兼容 AIMessageChunk 与 AIMessage；最终答案按 12 字分段下发",
       "status": "fixed",
       "evidence": "commit 294f254",
-      "id": "F-015"
+      "id": "F-014"
     },
     {
       "category": "agent_behavior",
@@ -246,7 +230,7 @@
       "suggested_fix": "摘要不再用 system 角色，改为并入最终 user 消息的「[此前对话摘要] + [本次问题]」前缀",
       "status": "fixed",
       "evidence": "commit 294f254",
-      "id": "F-016"
+      "id": "F-015"
     },
     {
       "category": "ci_dependency",
@@ -261,7 +245,7 @@
       "suggested_fix": "requirements.txt 补 PyJWT>=2.8；ci.yml 增加「依赖自检」步骤（import 关键模块）",
       "status": "fixed",
       "evidence": "commit 1af4d0a",
-      "id": "F-017"
+      "id": "F-016"
     },
     {
       "category": "test_flakiness",
@@ -276,7 +260,7 @@
       "suggested_fix": "测试改为 purge_old_conversations(-1)，构造确定性的未来截止时间",
       "status": "fixed",
       "evidence": "commit 1af4d0a",
-      "id": "F-018"
+      "id": "F-017"
     },
     {
       "category": "api_robustness",
@@ -291,7 +275,7 @@
       "suggested_fix": "路由层捕获 ParseError 映射为 HTTP 400；补测试覆盖非法 docx",
       "status": "fixed",
       "evidence": "修复于 v3.2（多格式解析）",
-      "id": "F-019"
+      "id": "F-018"
     },
     {
       "category": "documentation",
@@ -306,7 +290,7 @@
       "suggested_fix": "正文改为按实测值动态输出；统一为 86%（18/21）与整体 90%（28/31）",
       "status": "fixed",
       "evidence": "commit 81a86ff（health_advisor 仓库）",
-      "id": "F-020"
+      "id": "F-019"
     },
     {
       "category": "permission",
@@ -321,7 +305,7 @@
       "suggested_fix": "授予/回收时统一归一化为 str(target['id'])，与鉴权侧的字符串比较对齐",
       "status": "fixed",
       "evidence": "修复于 v3.2（权限体系）",
-      "id": "F-021"
+      "id": "F-020"
     },
     {
       "category": "permission",
@@ -336,7 +320,7 @@
       "suggested_fix": "为 kb_manager 补充 doc:acl 权限，并补测试覆盖该角色授权流程",
       "status": "fixed",
       "evidence": "修复于 v3.2（权限体系）",
-      "id": "F-022"
+      "id": "F-021"
     },
     {
       "category": "chunking",
@@ -348,10 +332,10 @@
       "expected": "稳定行为",
       "actual": "技术运维手册的「## 部署流程」下，'1. 上传发布包至 /opt/app/release 目录；' 整块未进入任何 chunk；后续 chunk 的章节前缀变成 '[技术运维手册.md > 2. 执行 ./deploy.sh …]'",
       "root_cause": "Markdown 有序列表被解析成标题层级（'1. xxx' 被当作 section），首项被并入标题后随父块丢弃",
-      "suggested_fix": "待修：解析器需区分「有序列表」与「标题」；列表项应作为独立 block 且不进入章节路径",
+      "suggested_fix": "Markdown 只认 `#` 标题；纯文本的手工标题规则要求不以列表标点结尾",
       "status": "fixed",
-      "evidence": "评测集校验发现（scripts/validate_dataset.py 分块可检索性检查）",
-      "id": "F-023"
+      "evidence": "app/parsers/text_parser.py 修复（同一提交）",
+      "id": "F-022"
     }
   ]
 }

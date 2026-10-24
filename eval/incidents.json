@@ -108,10 +108,10 @@
       "severity": "medium",
       "symptom": "技术运维手册的「## 部署流程」下，'1. 上传发布包至 /opt/app/release 目录；' 整块未进入任何 chunk；后续 chunk 的章节前缀变成 '[技术运维手册.md > 2. 执行 ./deploy.sh …]'",
       "root_cause": "Markdown 有序列表被解析成标题层级（'1. xxx' 被当作 section），首项被并入标题后随父块丢弃",
-      "fix": "待修：解析器需区分「有序列表」与「标题」；列表项应作为独立 block 且不进入章节路径",
-      "verified": "未修复（open）",
-      "evidence": "评测集校验发现（scripts/validate_dataset.py 分块可检索性检查）",
-      "reproduce": "python scripts/validate_dataset.py eval/dataset_v3.json，观察 /opt/app/release 的 evidence 分块后不可检索"
+      "fix": "Markdown 只认 `#` 标题；纯文本的手工标题规则要求不以列表标点结尾",
+      "verified": "部署步骤块包含 /opt/app/release；validate_dataset 分块可检索性检查通过",
+      "evidence": "app/parsers/text_parser.py 修复（同一提交）",
+      "reproduce": "python scripts/validate_dataset.py eval/dataset_v3.json（修复前 /opt/app/release 不可检索）"
     }
   ]
 }

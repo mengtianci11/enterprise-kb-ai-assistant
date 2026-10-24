@@ -18,6 +18,32 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
+# 领域同义词（仅用于 BM25 稀疏路，避免改变 dense 的语义检索）
+# 解决"口语问法 vs 书面语原文"的词面不匹配（C 阶段失败分类的 chunk_recall_miss）
+DOMAIN_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "面几轮": ("面试", "轮次"),
+    "几轮面试": ("面试", "轮次"),
+    "面试轮次": ("面试", "轮次"),
+    "机密文件": ("数据外发", "机密", "外发"),
+    "机密数据": ("数据外发", "机密"),
+    "数据外发": ("机密", "外发"),
+    "打卡": ("考勤",),
+    "咋办": ("怎么办",),
+    "咋": ("怎么",),
+    "住宿": ("差旅", "报销"),
+    "年假": ("带薪年假",),
+}
+
+
+def expand_query(query: str) -> str:
+    """按领域同义词追加检索词（BM25 用；不改变原始 query 的语义）。"""
+    extras: list[str] = []
+    for phrase, synonyms in DOMAIN_SYNONYMS.items():
+        if phrase in query:
+            extras.extend(s for s in synonyms if s not in query)
+    return query + (" " + " ".join(extras) if extras else "")
+
+
 class AdvancedRAG:
     """混合检索 + 重排序管线。"""
 
@@ -150,7 +176,7 @@ class AdvancedRAG:
         if visible is not None and not visible:
             return []
 
-        tokenized_query = list(jieba.cut(query))
+        tokenized_query = list(jieba.cut(expand_query(query)))
         scores = self.bm25.get_scores(tokenized_query)
 
         if visible is not None:

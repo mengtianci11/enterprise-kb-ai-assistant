@@ -64,6 +64,30 @@ class TestFusion:
             assert results, f"策略 {strategy} 应返回结果"
 
 
+class TestDomainSynonyms:
+    def test_expand_query_adds_synonyms(self):
+        from app.retrieval import expand_query
+
+        expanded = expand_query("公司应聘一般要面几轮？")
+        assert "面试" in expanded and "轮次" in expanded
+        assert "数据外发" in expand_query("要给客户发送机密文件，需要走什么流程？")
+
+    def test_expand_query_keeps_original(self):
+        from app.retrieval import expand_query
+
+        assert expand_query("完全无关的问题") == "完全无关的问题"
+
+    def test_bm25_recalls_paraphrase_via_synonyms(self, processor, rag):
+        """口语「面几轮」应能召回书面语「两轮面试」。"""
+        processor.add_document(
+            "招聘.md",
+            "简历筛选通过后安排两轮面试：第一轮技术/业务面试，第二轮部门负责人终面。".encode("utf-8"),
+        )
+        rag.build_indices()
+        results = rag.bm25_search("公司应聘一般要面几轮？", top_k=5)
+        assert any("两轮面试" in r["content"] for r in results)
+
+
 def rag_module_rrf(*args, **kwargs):
     from app.retrieval import AdvancedRAG
 

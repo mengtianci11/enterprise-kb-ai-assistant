@@ -146,6 +146,26 @@ class TestTextLike:
         titles = [b for b in parsed.blocks if b.type == "title"]
         assert [(t.text, t.level) for t in titles] == [("总则", 1), ("考勤", 2)]
 
+    def test_markdown_ordered_list_not_heading(self):
+        """INC-09 回归：Markdown 有序列表不能被当成章节标题（否则首项内容会丢）。"""
+        content = (
+            "## 部署流程\n"
+            "1. 上传发布包至 /opt/app/release 目录；\n"
+            "2. 执行 ./deploy.sh 完成依赖安装；\n"
+        ).encode("utf-8")
+        parsed, _ = parse_document(content, "运维.md", use_cache=False)
+        titles = [b.text for b in parsed.blocks if b.type == "title"]
+        assert titles == ["部署流程"]
+        assert not any(t.startswith("1.") for t in titles)
+
+    def test_plain_text_manual_heading(self):
+        """纯文本仍保留手工标题识别，但带列表标点结尾的不算标题。"""
+        content = "第一章 总则\n本手册适用于全体员工。\n1. 上传发布包至 /opt/app/release 目录；\n".encode("utf-8")
+        parsed, _ = parse_document(content, "手册.txt", use_cache=False)
+        titles = [b.text for b in parsed.blocks if b.type == "title"]
+        assert "第一章 总则" in titles
+        assert not any("上传发布包" in t for t in titles)
+
     def test_gbk_fallback(self):
         parsed, _ = parse_document("年假规定：5天。".encode("gbk"), "旧文件.txt")
         assert "年假" in parsed.text

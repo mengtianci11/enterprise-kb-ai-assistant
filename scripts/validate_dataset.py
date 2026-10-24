@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 CORPUS = ROOT / "eval" / "corpus"
 
 
@@ -27,7 +31,8 @@ def build_chunks(corpus_dir: Path = CORPUS) -> dict[str, list[str]]:
 
     chunks: dict[str, list[str]] = {}
     for path in sorted(corpus_dir.glob("*.md")):
-        parsed, _ = parse_document(path.read_bytes(), path.name, use_cache=True)
+        # 校验必须反映当前解析器行为，不能命中历史解析缓存
+        parsed, _ = parse_document(path.read_bytes(), path.name, use_cache=False)
         texts = [
             c["text"]
             for c in split_blocks(

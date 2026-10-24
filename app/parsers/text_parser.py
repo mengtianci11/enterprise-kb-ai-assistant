@@ -13,6 +13,20 @@ logger = logging.getLogger(__name__)
 
 _MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 _MANUAL_HEADING_RE = re.compile(r"^(第[一二三四五六七八九十百千]+[章节篇条]|[0-9]+(\.[0-9]+){0,3}[、.\s])")
+# 列表项常见结尾：命中这些标点的不应被当成标题（避免把「1. 上传发布包…；」当章节）
+_LIST_ENDING = ("；", ";", "。", "，", ",", "：", ":")
+
+
+def _is_manual_heading(line: str) -> bool:
+    """纯文本文档的“手工标题”判定：短、无列表标点结尾。
+
+    Markdown 文档不走这条规则（只认 `#`），否则有序列表会被误判成章节，
+    进而导致列表项内容丢失（INC-09）。
+    """
+    candidate = line.strip()
+    if len(candidate) > 40 or not _MANUAL_HEADING_RE.match(candidate):
+        return False
+    return not candidate.endswith(_LIST_ENDING)
 
 
 class TextParser:
@@ -23,6 +37,7 @@ class TextParser:
 
     def parse(self, content: bytes, filename: str) -> ParsedDocument:
         text, encoding = decode_text(content)
+        is_markdown = filename.lower().endswith((".md", ".markdown"))
         blocks: list[Block] = []
         for raw in text.splitlines():
             line = raw.rstrip()
@@ -31,7 +46,7 @@ class TextParser:
             m = _MD_HEADING_RE.match(line)
             if m:
                 blocks.append(Block(type="title", text=m.group(2).strip(), level=len(m.group(1))))
-            elif len(line.strip()) <= 40 and _MANUAL_HEADING_RE.match(line.strip()):
+            elif (not is_markdown) and _is_manual_heading(line):
                 blocks.append(Block(type="title", text=line.strip(), level=1))
             else:
                 blocks.append(Block(type="paragraph", text=line.strip()))
