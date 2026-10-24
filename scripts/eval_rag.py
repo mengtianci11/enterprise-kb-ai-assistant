@@ -70,22 +70,56 @@ def is_doc_hit(results: list, doc: str) -> bool:
     return any((r.get("metadata") or {}).get("source") == doc for r in results)
 
 
-def evaluate() -> dict:
+def aggregate(raw, questions, latencies, n_docs, chunks, elapsed, dataset_label,
+              n_unanswerable=0, n_total=None) -> dict:
+    """把逐题结果汇总为指标行；不可答题不参与检索指标（它们考察拒答）。"""
+    rows = []
+    for strategy in STRATEGIES:
+        bucket = {
+            qid: v for qid, v in (raw.get(strategy) or {}).items()
+            if questions.get(str(qid), {}).get("type") != "unanswerable"
+        }
+        n = len(bucket) or 1
+        lat = latencies.get(strategy) or []
+        rows.append({
+            "strategy": strategy,
+            "hit@3": round(sum(v["hit3"] for v in bucket.values()) / n * 100, 1),
+            "hit@5": round(sum(v["hit5"] for v in bucket.values()) / n * 100, 1),
+            "mrr@5": round(sum(v["mrr"] for v in bucket.values()) / n * 100, 1),
+            "top1": round(sum(v["top1"] for v in bucket.values()) / n * 100, 1),
+            "doc_hit@5": round(sum(v["doc_hit"] for v in bucket.values()) / n * 100, 1),
+            "avg_ms": round(sum(lat) / len(lat), 0) if lat else 0,
+        })
+    scored = len({qid for qid in (raw.get("vector") or {})
+                  if questions.get(str(qid), {}).get("type") != "unanswerable"})
+    return {
+        "rows": rows, "raw": raw, "n": scored,
+        "n_total": n_total if n_total is not None else len(questions),
+        "n_unanswerable": n_unanswerable,
+        "n_docs": n_docs, "chunks": chunks, "elapsed_s": elapsed,
+        "dataset": dataset_label,
+    }
+
+
+def evaluate(dataset_path: pathlib.Path = DATASET_PATH) -> dict:
     print(f"[1/4] 构建索引（语料：{CORPUS_DIR}）...")
     rag = build_rag()
     print(f"     共 {len(rag.dp.chunks)} 个分块")
 
     print("[2/4] 加载评测集...")
-    dataset = json.loads(DATASET_PATH.read_text(encoding="utf-8"))
+    dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
     questions = dataset["questions"]
     print(f"     {len(questions)} 道题")
 
     print("[3/4] 逐策略检索（含真实 API 调用，请耐心等待）...")
-    results = defaultdict(lambda: defaultdict(list))  # strategy -> qid -> {hits, mrr, ...}
-    latencies = defaultdict(list)                      # strategy -> [耗时ms]
-    doc_level = defaultdict(lambda: defaultdict(list))
+    results = defaultdict(dict)          # strategy -> qid -> {hits, mrr, ...}
+    latencies = defaultdict(list)        # strategy -> [耗时ms]
+    n_unanswerable = 0
     t0 = time.time()
     for idx, item in enumerate(questions, 1):
+        if item.get("type") == "unanswerable":
+            n_unanswerable += 1
+            continue
         truth = locate_ground_truth(rag, item)
         for strategy in STRATEGIES:
             t1 = time.perf_counter()
@@ -112,28 +146,15 @@ def evaluate() -> dict:
         print(f"     进度 {idx}/{len(questions)}（{time.time() - t0:.0f}s）")
 
     print("[4/4] 汇总指标...")
-    rows = []
-    for strategy in STRATEGIES:
-        bucket = results[strategy]
-        n = len(bucket)
-        hit3 = sum(v["hit3"] for v in bucket.values()) / n
-        hit5 = sum(v["hit5"] for v in bucket.values()) / n
-        mrr = sum(v["mrr"] for v in bucket.values()) / n
-        doc_hit_rate = sum(v["doc_hit"] for v in bucket.values()) / n
-        top1 = sum(v["top1"] for v in bucket.values()) / n
-        avg_ms = sum(latencies[strategy]) / len(latencies[strategy]) if latencies[strategy] else 0
-        rows.append({
-            "strategy": strategy,
-            "hit@3": round(hit3 * 100, 1),
-            "hit@5": round(hit5 * 100, 1),
-            "mrr@5": round(mrr * 100, 1),
-            "top1": round(top1 * 100, 1),
-            "doc_hit@5": round(doc_hit_rate * 100, 1),
-            "avg_ms": round(avg_ms, 0),
-        })
-    return {"rows": rows, "raw": results, "n": len(questions),
-            "n_docs": len(list(CORPUS_DIR.glob("*.md"))),
-            "chunks": len(rag.dp.chunks), "elapsed_s": round(time.time() - t0, 1)}
+    return aggregate(
+        results, questions, latencies,
+        n_docs=len(list(CORPUS_DIR.glob("*.md"))),
+        chunks=len(rag.dp.chunks),
+        elapsed=round(time.time() - t0, 1),
+        dataset_label=str(dataset_path.relative_to(ROOT)) if dataset_path.is_relative_to(ROOT) else str(dataset_path),
+        n_unanswerable=n_unanswerable,
+        n_total=len(questions),
+    )
 
 
 def render_markdown(summary: dict) -> str:
@@ -149,7 +170,8 @@ def render_markdown(summary: dict) -> str:
     lines = [
         "# 检索评测报告",
         "",
-        f"> 评测集：`eval/dataset.json`（{n} 道题） ｜ 语料：`eval/corpus`（{summary['n_docs']} 篇） ｜ "
+        f"> 评测集：`{summary.get('dataset', 'eval/dataset.json')}`（{summary.get('n_total', n)} 道题，"
+        f"其中 {summary.get('n_unanswerable', 0)} 道不可答题不参与检索指标） ｜ 语料：`eval/corpus`（{summary['n_docs']} 篇） ｜ "
         f"分块：{settings.CHUNK_STRATEGY}/{settings.CHUNK_SIZE}/{settings.CHUNK_OVERLAP} ｜ "
         f"索引分块总数：{summary['chunks']} ｜ 运行耗时：{summary['elapsed_s']}s",
         "",
@@ -192,17 +214,51 @@ def render_markdown(summary: dict) -> str:
 
 
 if __name__ == "__main__":
-    settings.validate()
-    summary = evaluate()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="检索评测（支持指定数据集与输出路径）")
+    parser.add_argument("--dataset", default=str(DATASET_PATH))
+    parser.add_argument("--report", default=str(REPORT_PATH))
+    parser.add_argument("--last-run", default=str(ROOT / "eval" / "last_run.json"))
+    parser.add_argument("--details", default=str(ROOT / "eval" / "last_run_details.json"))
+    parser.add_argument("--from-details", default=None,
+                        help="从已有逐题明细重算指标（不调用 API；用于修正分母/口径）")
+    args = parser.parse_args()
+    dataset_path = pathlib.Path(args.dataset)
+    report_path = pathlib.Path(args.report)
+    last_run_path = pathlib.Path(args.last_run)
+    details_path = pathlib.Path(args.details)
+
+    if args.from_details:
+        print("[重算模式] 从已有明细汇总，不调用 API")
+        details_in = json.loads(pathlib.Path(args.from_details).read_text(encoding="utf-8"))
+        dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+        questions = {str(q["id"]): q for q in dataset["questions"]}
+        prev_metrics = {}
+        if last_run_path.exists():
+            prev_metrics = json.loads(last_run_path.read_text(encoding="utf-8")).get("metrics") or {}
+        latencies = {s: [m.get("avg_ms", 0)] for s, m in prev_metrics.items()}
+        summary = aggregate(
+            details_in["results"], questions, latencies,
+            n_docs=len(list(CORPUS_DIR.glob("*.md"))),
+            chunks=details_in.get("chunks", 0),
+            elapsed=details_in.get("elapsed_s", 0) or 0,
+            dataset_label=str(dataset_path.relative_to(ROOT)) if dataset_path.is_relative_to(ROOT) else str(dataset_path),
+            n_unanswerable=sum(1 for q in dataset["questions"] if q.get("type") == "unanswerable"),
+            n_total=len(dataset["questions"]),
+        )
+    else:
+        settings.validate()
+        summary = evaluate(dataset_path)
     print("\n===== 评测结果 =====")
     try:
         print(pd.DataFrame(summary["rows"]).to_string(index=False))
     except Exception:  # noqa: BLE001
         for r in summary["rows"]:
             print(r)
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(render_markdown(summary), encoding="utf-8")
-    print(f"\n报告已写入：{REPORT_PATH}")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(render_markdown(summary), encoding="utf-8")
+    print(f"\n报告已写入：{report_path}")
 
     # 机器可读结果：供质量门禁（scripts/check_metrics.py）与 CI 对比基线使用
     import hashlib
@@ -211,30 +267,34 @@ if __name__ == "__main__":
 
     last_run = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "questions": summary["n"],
+        "dataset": summary.get("dataset"),
+        "questions": summary.get("n_total", summary["n"]),
+        "scored_questions": summary["n"],
+        "unanswerable": summary.get("n_unanswerable", 0),
         "chunks": summary["chunks"],
         "elapsed_s": summary["elapsed_s"],
-        "dataset_md5": hashlib.md5(DATASET_PATH.read_bytes()).hexdigest(),
+        "dataset_md5": hashlib.md5(dataset_path.read_bytes()).hexdigest(),
         "chunk_strategy": settings.CHUNK_STRATEGY,
         "chunk_size": settings.CHUNK_SIZE,
         "chunk_overlap": settings.CHUNK_OVERLAP,
         "metrics": {r["strategy"]: r for r in summary["rows"]},
     }
-    LAST_RUN_PATH = ROOT / "eval" / "last_run.json"
-    LAST_RUN_PATH.write_text(
+    last_run_path.parent.mkdir(parents=True, exist_ok=True)
+    last_run_path.write_text(
         json.dumps(last_run, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    print(f"机器可读结果已写入：{LAST_RUN_PATH}")
+    print(f"机器可读结果已写入：{last_run_path}")
 
     # 逐题明细：失败分类的原始数据（见 scripts/export_failures.py）
-    details = {
-        "generated_at": last_run["generated_at"],
-        "dataset_md5": last_run["dataset_md5"],
-        "chunks": last_run["chunks"],
-        "results": summary["raw"],
-    }
-    DETAILS_PATH = ROOT / "eval" / "last_run_details.json"
-    DETAILS_PATH.write_text(
-        json.dumps(details, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    print(f"逐题明细已写入：{DETAILS_PATH}")
+    if not args.from_details:
+        details = {
+            "generated_at": last_run["generated_at"],
+            "dataset_md5": last_run["dataset_md5"],
+            "chunks": last_run["chunks"],
+            "results": summary["raw"],
+        }
+        details_path.parent.mkdir(parents=True, exist_ok=True)
+        details_path.write_text(
+            json.dumps(details, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"逐题明细已写入：{details_path}")

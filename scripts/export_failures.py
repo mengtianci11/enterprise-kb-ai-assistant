@@ -65,6 +65,9 @@ def collect_retrieval(details: dict, questions: dict) -> list[dict]:
     buckets: dict[tuple[str, str], dict] = {}
     for strategy, per_q in (details.get("results") or {}).items():
         for qid, r in (per_q or {}).items():
+            # 不可答题不参与检索指标（它们考察拒答），不记为检索失败
+            if questions.get(str(qid), {}).get("type") == "unanswerable":
+                continue
             category = _classify_retrieval(r)
             if not category:
                 continue
@@ -229,20 +232,33 @@ def _load(path: Path) -> Optional[dict]:
 
 
 def main() -> None:
-    details = _load(DETAILS_PATH)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="导出失败样本（支持指定数据集产物）")
+    parser.add_argument("--details", default=str(DETAILS_PATH))
+    parser.add_argument("--dataset", default=str(DATASET_PATH))
+    parser.add_argument("--quality", default=str(QUALITY_PATH))
+    parser.add_argument("--probes", default=str(PROBES_PATH))
+    parser.add_argument("--incidents", default=str(INCIDENTS_PATH))
+    parser.add_argument("--out", default=str(OUT_PATH))
+    args = parser.parse_args()
+
+    details = _load(Path(args.details))
     if details is None:
         raise SystemExit(
-            f"缺少 {DETAILS_PATH}，请先运行 python scripts/eval_rag.py 生成逐题明细"
+            f"缺少 {args.details}，请先运行 python scripts/eval_rag.py 生成逐题明细"
         )
     result = export(
         details=details,
-        dataset=_load(DATASET_PATH),
-        quality=_load(QUALITY_PATH),
-        probes=_load(PROBES_PATH),
-        incidents=_load(INCIDENTS_PATH),
+        dataset=_load(Path(args.dataset)),
+        quality=_load(Path(args.quality)),
+        probes=_load(Path(args.probes)),
+        incidents=_load(Path(args.incidents)),
     )
-    OUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"失败样本已写入：{OUT_PATH}")
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"失败样本已写入：{out}")
     print(f"共 {result['total']} 条：{result['counts']}")
 
 
