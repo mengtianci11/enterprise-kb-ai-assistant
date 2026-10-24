@@ -73,11 +73,14 @@ def is_doc_hit(results: list, doc: str) -> bool:
 def aggregate(raw, questions, latencies, n_docs, chunks, elapsed, dataset_label,
               n_unanswerable=0, n_total=None) -> dict:
     """把逐题结果汇总为指标行；不可答题不参与检索指标（它们考察拒答）。"""
+    qmap = questions if isinstance(questions, dict) else {
+        str(q["id"]): q for q in questions
+    }
     rows = []
     for strategy in STRATEGIES:
         bucket = {
             qid: v for qid, v in (raw.get(strategy) or {}).items()
-            if questions.get(str(qid), {}).get("type") != "unanswerable"
+            if qmap.get(str(qid), {}).get("type") != "unanswerable"
         }
         n = len(bucket) or 1
         lat = latencies.get(strategy) or []
@@ -91,10 +94,10 @@ def aggregate(raw, questions, latencies, n_docs, chunks, elapsed, dataset_label,
             "avg_ms": round(sum(lat) / len(lat), 0) if lat else 0,
         })
     scored = len({qid for qid in (raw.get("vector") or {})
-                  if questions.get(str(qid), {}).get("type") != "unanswerable"})
+                  if qmap.get(str(qid), {}).get("type") != "unanswerable"})
     return {
         "rows": rows, "raw": raw, "n": scored,
-        "n_total": n_total if n_total is not None else len(questions),
+        "n_total": n_total if n_total is not None else len(qmap),
         "n_unanswerable": n_unanswerable,
         "n_docs": n_docs, "chunks": chunks, "elapsed_s": elapsed,
         "dataset": dataset_label,
