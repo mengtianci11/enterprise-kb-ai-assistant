@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "note": "真实发生过的系统故障（非假设），每条都有症状、根因、修复与验证证据；来源为本项目开发过程中的实测记录。",
+    "owner": "mengtianci11",
+    "updated_at": "2026-10-24"
+  },
+  "incidents": [
+    {
+      "id": "INC-01",
+      "title": "流式问答只返回 [DONE]，页面不吐字",
+      "category": "runtime_reliability",
+      "severity": "high",
+      "symptom": "/chat/stream 返回的 SSE 只有 data: [DONE]，无任何 token；前端打字机无输出",
+      "root_cause": "LangGraph 1.x 的 astream_events 不再产生 on_chat_model_stream 事件；且 create_agent 内部用 ainvoke，拿到的是完整 AIMessage 而非 token 块",
+      "fix": "改用 astream(stream_mode='messages')；_stream_text 兼容 AIMessageChunk 与 AIMessage；最终答案按 12 字分段下发",
+      "verified": "curl -N /chat/stream 可观察到分段 token；新增 7 项 _stream_text 单测",
+      "evidence": "commit 294f254",
+      "reproduce": "python scripts/serve 或启动服务后 curl -N -X POST /chat/stream 观察首个事件是否为 [DONE]"
+    },
+    {
+      "id": "INC-02",
+      "title": "带摘要追问时 Agent 跳过工具调用，答「请稍等，我为您查询」",
+      "category": "agent_behavior",
+      "severity": "high",
+      "symptom": "会话摘要以 system 消息注入后，回复变成「请稍等，我为您查询公司关于年假的规定」，且无 tool 调用",
+      "root_cause": "给 create_agent 传 system 角色消息会干扰 ReAct 的工具选择（模型误以为系统已接管）",
+      "fix": "摘要不再用 system 角色，改为并入最终 user 消息的「[此前对话摘要] + [本次问题]」前缀",
+      "verified": "带摘要的追问可正常触发 search_knowledge_base 并返回引用",
+      "evidence": "commit 294f254",
+      "reproduce": "构造带 summary 的会话后提问，检查响应消息数是否为 3（system/user/assistant 且无 tool 消息）"
+    },
+    {
+      "id": "INC-03",
+      "title": "CI 全部 5 次运行失败（exit code 2），本地却全绿",
+      "category": "ci_dependency",
+      "severity": "high",
+      "symptom": "GitHub Actions test job 在 pytest 收集阶段中断：ModuleNotFoundError: No module named 'jwt'",
+      "root_cause": "app/security.py 直接 import jwt，但 requirements.txt 漏了 PyJWT；本地环境恰好装过该包",
+      "fix": "requirements.txt 补 PyJWT>=2.8；ci.yml 增加「依赖自检」步骤（import 关键模块）",
+      "verified": "run 39614306821 三个 job 全绿；导入自检输出 imports ok",
+      "evidence": "commit 1af4d0a",
+      "reproduce": "干净环境 pip install -r requirements-dev.txt 后执行 pytest，观察是否在 test_stream_text 收集阶段报 jwt 缺失"
+    },
+    {
+      "id": "INC-04",
+      "title": "test_ttl_purge 偶发失败（同样代码有时通过）",
+      "category": "test_flakiness",
+      "severity": "medium",
+      "symptom": "store.purge_old_conversations(0) 偶发返回 0，断言失败",
+      "root_cause": "days=0 时截止时间与会话创建时间可能落在同一毫秒，updated_at < cutoff 不成立",
+      "fix": "测试改为 purge_old_conversations(-1)，构造确定性的未来截止时间",
+      "verified": "连续多次运行稳定通过；全量 147 项测试全绿",
+      "evidence": "commit 1af4d0a",
+      "reproduce": "无 .env 时跑全量测试，观察 test_ttl_purge 是否偶发失败"
+    },
+    {
+      "id": "INC-05",
+      "title": "上传非法 docx 返回 502（应为客户端错误 400）",
+      "category": "api_robustness",
+      "severity": "medium",
+      "symptom": "损坏的 .docx 触发 BadZipFile，接口返回 502 Bad Gateway",
+      "root_cause": "解析异常未被映射为客户端错误，而是冒泡成服务端错误",
+      "fix": "路由层捕获 ParseError 映射为 HTTP 400；补测试覆盖非法 docx",
+      "verified": "tests/test_api.py 中非法 docx 用例断言 400",
+      "evidence": "修复于 v3.2（多格式解析）",
+      "reproduce": "上传一个非 zip 的 .docx，观察返回码是否为 400"
+    },
+    {
+      "id": "INC-06",
+      "title": "健康科普项目报告正文写 81%，表格写 86%（同一指标两个数）",
+      "category": "documentation",
+      "severity": "low",
+      "symptom": "recall_report.md 表格为 86%（含等价），正文写 81%；health_rag.py 注释写 87.1%/81%",
+      "root_cause": "报告正文是硬编码字符串，未随实测值更新（表格是动态计算的）",
+      "fix": "正文改为按实测值动态输出；统一为 86%（18/21）与整体 90%（28/31）",
+      "verified": "仓库内不再出现 81%/87.1%；报告与表格一致",
+      "evidence": "commit 81a86ff（health_advisor 仓库）",
+      "reproduce": "对比 evaluation/recall_report.md 的表格与正文数字"
+    },
+    {
+      "id": "INC-07",
+      "title": "按用户名授予文档 ACL 不生效（授权后仍看不到）",
+      "category": "permission",
+      "severity": "high",
+      "symptom": "管理员给 alice 授权机密文档后，alice 检索仍查不到该文档",
+      "root_cause": "授权时把用户名写入了 target（字符串），而鉴权时按数字 user_id 比对，类型不一致导致规则永远不匹配",
+      "fix": "授予/回收时统一归一化为 str(target['id'])，与鉴权侧的字符串比较对齐",
+      "verified": "授权后 alice 可检索到机密文档；未授权用户仍查不到（回归测试覆盖）",
+      "evidence": "修复于 v3.2（权限体系）",
+      "reproduce": "以 admin 调用 /documents/{id}/acl 授予 alice，再用 alice 提问该文档内容"
+    },
+    {
+      "id": "INC-08",
+      "title": "kb_manager 角色无法管理文档 ACL（权限点缺失）",
+      "category": "permission",
+      "severity": "medium",
+      "symptom": "kb_manager 调用 ACL 授权接口返回 403",
+      "root_cause": "ROLE_PERMISSIONS 中 kb_manager 缺少 doc:acl 权限点",
+      "fix": "为 kb_manager 补充 doc:acl 权限，并补测试覆盖该角色授权流程",
+      "verified": "kb_manager 可正常授权；user 角色仍被拒绝",
+      "evidence": "修复于 v3.2（权限体系）",
+      "reproduce": "以 kb_manager 身份调用 ACL 接口，观察是否 403"
+    }
+  ]
+}

@@ -103,6 +103,11 @@ def evaluate() -> dict:
                 "mrr": 1.0 / hits[0] if hits else 0.0,
                 "doc_hit": is_doc_hit(docs, item["doc"]),
                 "top1": hits[0] == 1 if hits else False,
+                # 逐题明细：供失败分类（scripts/export_failures.py）使用
+                "ranks": hits,
+                "truth_chunks": sorted(truth),
+                "top3_docs": [(d.get("metadata") or {}).get("source") for d in docs[:3]],
+                "top3_ids": [(d.get("metadata") or {}).get("chunk_id") for d in docs[:3]],
             }
         print(f"     进度 {idx}/{len(questions)}（{time.time() - t0:.0f}s）")
 
@@ -220,3 +225,16 @@ if __name__ == "__main__":
         json.dumps(last_run, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print(f"机器可读结果已写入：{LAST_RUN_PATH}")
+
+    # 逐题明细：失败分类的原始数据（见 scripts/export_failures.py）
+    details = {
+        "generated_at": last_run["generated_at"],
+        "dataset_md5": last_run["dataset_md5"],
+        "chunks": last_run["chunks"],
+        "results": summary["raw"],
+    }
+    DETAILS_PATH = ROOT / "eval" / "last_run_details.json"
+    DETAILS_PATH.write_text(
+        json.dumps(details, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"逐题明细已写入：{DETAILS_PATH}")
