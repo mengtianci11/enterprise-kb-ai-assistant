@@ -22,6 +22,24 @@ current_allowed_docs: ContextVar[Optional[set[int]]] = ContextVar(
 # 当前用户名（用于审计与日志溯源）
 current_username: ContextVar[str] = ContextVar("current_username", default="anonymous")
 
+# 本轮请求中检索工具命中的证据（供引用校验使用；路由层每轮重置）
+current_evidence: ContextVar[list] = ContextVar("current_evidence", default=[])
+
+
+def set_evidence_context() -> object:
+    """开始新一轮请求：清空证据列表，返回 token 供 reset。"""
+    return current_evidence.set([])
+
+
+def reset_evidence_context(token) -> None:
+    current_evidence.reset(token)
+
+
+def record_evidence(docs: list) -> None:
+    """检索工具调用时记录证据（同一请求内多次检索会累积）。"""
+    bucket = current_evidence.get()
+    bucket.extend(docs or [])
+
 
 def set_permission_context(allowed_docs: Optional[set[int]], username: str = "anonymous"):
     """设置权限上下文，返回 token 供调用方 reset。"""
@@ -40,6 +58,10 @@ def reset_permission_context(tokens: tuple) -> None:
 __all__ = [
     "current_allowed_docs",
     "current_username",
+    "current_evidence",
     "set_permission_context",
     "reset_permission_context",
+    "set_evidence_context",
+    "reset_evidence_context",
+    "record_evidence",
 ]

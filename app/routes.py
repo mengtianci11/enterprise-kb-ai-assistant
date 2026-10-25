@@ -19,7 +19,14 @@ from sse_starlette import EventSourceResponse
 import app.llm as llm  # noqa: F401  (确保模块可打桩的同时被显式依赖)
 from app import __version__
 from app.config import settings
-from app.context import reset_permission_context, set_permission_context
+from app.citation import build_evidence, sanitize_answer, verify_answer
+from app.context import (
+    current_evidence,
+    reset_evidence_context,
+    reset_permission_context,
+    set_evidence_context,
+    set_permission_context,
+)
 from app.parsers import (
     PARSERS,
     ParseError,
@@ -678,6 +685,7 @@ async def chat(
 
     allowed = allowed_doc_ids_for(user)
     tokens = set_permission_context(allowed, user.username)
+    evidence_token = set_evidence_context()
     try:
         result = state.agent.invoke(
             {"messages": messages},
@@ -690,8 +698,29 @@ async def chat(
         raise HTTPException(status_code=502, detail=f"问答服务异常：{exc}") from exc
     finally:
         reset_permission_context(tokens)
+        evidence = build_evidence(
+            current_evidence.get(), limit=settings.CITATION_MAX_EVIDENCE
+        )
+        reset_evidence_context(evidence_token)
 
     answer = result["messages"][-1].content
+    citations: list[dict] = []
+    citation_metrics: dict = {}
+    if settings.CITATION_VERIFY and evidence and "[E" in (answer or ""):
+        verification = verify_answer(answer, evidence)
+        answer, removed = sanitize_answer(answer, verification)
+        citation_metrics = {
+            "citation_precision": verification["citation_precision"],
+            "citation_recall": verification["citation_recall"],
+            "uncited_rate": verification["uncited_rate"],
+            "n_sentences": verification["n_sentences"],
+            "n_citation_pairs": verification["n_citation_pairs"],
+            "removed_sentences": removed,
+        }
+        citations = [
+            {"eid": e.eid, "source": e.source, "chunk_id": e.chunk_id}
+            for e in evidence
+        ]
     state.store.add_message(conv["id"], "assistant", answer)
     _kick_summary(conv)
     _audit(
@@ -702,7 +731,14 @@ async def chat(
         resource_id=str(conv["id"]),
         detail=req.question,
     )
-    return ChatResponse(answer=answer, request_id=str(uuid.uuid4()), sources=[])
+    sources = [{"eid": e.eid, "source": e.source, "chunk_id": e.chunk_id} for e in evidence]
+    return ChatResponse(
+        answer=answer,
+        request_id=str(uuid.uuid4()),
+        sources=sources,
+        citations=citations,
+        citation_metrics=citation_metrics,
+    )
 
 
 @router.post("/chat/stream")

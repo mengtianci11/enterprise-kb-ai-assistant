@@ -106,6 +106,8 @@ class ChatResponse(BaseModel):
     answer: str
     request_id: str
     sources: List[dict] = []
+    citations: List[dict] = []
+    citation_metrics: dict = {}
 
 
 # ======================================================================

@@ -49,6 +49,10 @@ class Settings:
         # 结构感知分块：块内注入「文档名 > 章节路径」上下文（提升召回与引用可解释性）
         self.CHUNK_CONTEXT_HEADER = _get("CHUNK_CONTEXT_HEADER", "true").lower() == "true"
 
+        # ---- 引用校验（Citation Verification）----
+        self.CITATION_VERIFY = _get("CITATION_VERIFY", "true").lower() == "true"
+        self.CITATION_MAX_EVIDENCE = int(_get("CITATION_MAX_EVIDENCE", "5"))
+
         # ---- 解析与 OCR ----
         self.OCR_ENABLED = _get("OCR_ENABLED", "true").lower() == "true"
         self.OCR_DPI = int(_get("OCR_DPI", "200"))

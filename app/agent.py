@@ -13,16 +13,16 @@ from typing import Optional
 
 import app.llm as llm  # noqa: F401  (保留引用，便于测试打桩)
 from app.config import settings
-from app.context import current_allowed_docs
+from app.context import current_allowed_docs, current_evidence, record_evidence
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """你是企业知识库AI助手。
-- 公司制度、产品、技术问题 → 用 search_knowledge_base 检索后回答，引用来源
+- 公司制度、产品、技术问题 → 用 search_knowledge_base 检索后回答
 - 数学计算 → 用 calculator
 - 知识库查不到或用户要投诉/找人工 → 用 transfer_to_agent
 - 简单问候直接回答
-回答要简洁专业，引用资料时标注来源。"""
+回答要简洁专业；引用检索资料时必须在句末标注证据编号（如 [E1]），证据不足时明确说明。"""
 
 
 def build_agent(rag, llm_model: Optional[object] = None, checkpointer: Optional[object] = None):
@@ -54,10 +54,14 @@ def build_agent(rag, llm_model: Optional[object] = None, checkpointer: Optional[
             docs = rag.retrieve(query, allowed_doc_ids=allowed)
             if not docs:
                 return "知识库中未检索到与问题相关的内容。"
+            # 记录本轮证据，供引用校验（app/citation.py）使用；
+            # 编号按全局偏移递增，避免多次检索时 [E1] 冲突
+            start = len(current_evidence.get())
+            record_evidence(docs)
             result_text = "知识库检索到的参考内容如下：\n"
             for idx, doc in enumerate(docs, start=1):
                 source = (doc.get("metadata") or {}).get("source", "未知来源")
-                result_text += f"\n【参考资料 {idx}】(来源: {source})\n{doc['content']}\n"
+                result_text += f"\n[E{start + idx}] (来源: {source})\n{doc['content']}\n"
             return result_text
         except Exception as exc:  # noqa: BLE001
             return f"知识库检索暂时不可用，错误原因：{str(exc)}"
