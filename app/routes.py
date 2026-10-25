@@ -20,6 +20,7 @@ import app.llm as llm  # noqa: F401  (确保模块可打桩的同时被显式依
 from app import __version__
 from app.config import settings
 from app.citation import build_evidence, sanitize_answer, verify_answer
+from app.conflicts import conflict_note, detect_conflicts
 from app.context import (
     current_evidence,
     reset_evidence_context,
@@ -721,6 +722,15 @@ async def chat(
             {"eid": e.eid, "source": e.source, "chunk_id": e.chunk_id}
             for e in evidence
         ]
+
+    # B：冲突与时效（可选，默认关闭；开启后追加显式归因说明）
+    if settings.CONFLICT_DETECT and len(evidence) >= 2:
+        conflicts = detect_conflicts(evidence)
+        note = conflict_note(conflicts, req.question)
+        if note:
+            answer = f"{answer}\n\n{note}"
+            citation_metrics["conflicts"] = len(conflicts)
+
     state.store.add_message(conv["id"], "assistant", answer)
     _kick_summary(conv)
     _audit(

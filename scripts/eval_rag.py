@@ -43,12 +43,12 @@ STRATEGIES = ["vector", "bm25", "hybrid", "fusion", "full"]
 K_VALUES = [3, 5]
 
 
-def build_rag() -> AdvancedRAG:
+def build_rag(corpus_dir: pathlib.Path = CORPUS_DIR) -> AdvancedRAG:
     """按生产配置（真实向量化）构建索引。"""
     store = DocumentStore(db_path=str(ROOT / "data" / "eval_tmp.db"))
     store.clear_all()
     processor = DocumentProcessor(store)
-    for path in sorted(CORPUS_DIR.glob("*.md")):
+    for path in sorted(corpus_dir.glob("*.md")):
         content = path.read_bytes()
         processor.add_document(path.name, content)
     rag = AdvancedRAG(processor)

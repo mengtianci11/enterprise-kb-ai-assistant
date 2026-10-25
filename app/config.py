@@ -53,6 +53,10 @@ class Settings:
         self.CITATION_VERIFY = _get("CITATION_VERIFY", "true").lower() == "true"
         self.CITATION_MAX_EVIDENCE = int(_get("CITATION_MAX_EVIDENCE", "5"))
 
+        # ---- 冲突与时效（B）----
+        # 开启后 /chat 会检测证据间冲突并追加显式归因说明（每轮多若干次 LLM 判定）
+        self.CONFLICT_DETECT = _get("CONFLICT_DETECT", "false").lower() == "true"
+
         # ---- 解析与 OCR ----
         self.OCR_ENABLED = _get("OCR_ENABLED", "true").lower() == "true"
         self.OCR_DPI = int(_get("OCR_DPI", "200"))
