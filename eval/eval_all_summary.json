@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-10-26T22:26:59",
+  "python": "3.10.11",
+  "steps": [
+    {
+      "name": "检索 v2（24 题）",
+      "ok": true,
+      "returncode": 0,
+      "seconds": 164.4,
+      "tail": [
+        "机器可读结果已写入：C:\\Users\\ssb\\Desktop\\document_qa\\eval\\last_run.json",
+        "逐题明细已写入：C:\\Users\\ssb\\Desktop\\document_qa\\eval\\last_run_details.json",
+        "Building prefix dict from the default dictionary ...",
+        "Loading model from cache C:\\Users\\ssb\\AppData\\Local\\Temp\\jieba.cache",
+        "Loading model cost 0.612 seconds.",
+        "Prefix dict has been built successfully."
+      ]
+    },
+    {
+      "name": "冲突与时效",
+      "ok": true,
+      "returncode": 0,
+      "seconds": 221.1,
+      "tail": [
+        "指标: {'detection_rate': 1.0, 'attribution_accuracy': 1.0}",
+        "报告: C:\\Users\\ssb\\Desktop\\document_qa\\docs\\eval_conflict_report.md",
+        "Building prefix dict from the default dictionary ...",
+        "Loading model from cache C:\\Users\\ssb\\AppData\\Local\\Temp\\jieba.cache",
+        "Loading model cost 0.573 seconds.",
+        "Prefix dict has been built successfully."
+      ]
+    },
+    {
+      "name": "质量门禁",
+      "ok": true,
+      "returncode": 0,
+      "seconds": 0.1,
+      "tail": [
+        "full     hit@5        100.0   100.0    +0.0pp  ok",
+        "full     mrr@5         97.9    97.9    +0.0pp  ok",
+        "full     top1          95.8    95.8    +0.0pp  ok",
+        "full     doc_hit@5    100.0   100.0    +0.0pp  ok",
+        "",
+        "结果：✅ 通过（指标未回归）"
+      ]
+    }
+  ],
+  "metrics": {
+    "retrieval_v2": {
+      "questions": 24,
+      "hit@3": 100.0,
+      "mrr@5": 97.9,
+      "top1": 95.8
+    },
+    "retrieval_v3": {
+      "questions": 115,
+      "scored": 105,
+      "hit@3": 100.0,
+      "mrr@5": 99.5,
+      "top1": 99.0
+    },
+    "citation": {
+      "n_answerable": 30,
+      "n_unanswerable": 10,
+      "citation_precision": 0.917,
+      "citation_recall": 0.933,
+      "uncited_rate": 0.151,
+      "removed_sentences": 2,
+      "refusal_accuracy": 1.0,
+      "elapsed_s": 340.6
+    },
+    "conflict": {
+      "detection_rate": 1.0,
+      "attribution_accuracy": 1.0
+    }
+  },
+  "all_ok": true
+}
