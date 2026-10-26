@@ -41,3 +41,8 @@ eval/eval_tmp.db*
 samples/
 启动服务.bat
 start_server_hidden.bat
+
+# 本地简历产物（含个人联系方式，不入库）
+resume/
+# 临时脚本（本地生成，不入库）
+tmp_*.py
